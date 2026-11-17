@@ -4,6 +4,13 @@ import 'package:go_router/go_router.dart';
 import 'package:ieum_mobile/features/auth/presentation/login_screen.dart';
 import 'package:ieum_mobile/features/auth/presentation/sessions_screen.dart';
 import 'package:ieum_mobile/features/bootstrap/presentation/phase0_bootstrap_screen.dart';
+import 'package:ieum_mobile/features/group/presentation/create_group_screen.dart';
+import 'package:ieum_mobile/features/group/presentation/group_detail_screen.dart';
+import 'package:ieum_mobile/features/group/presentation/group_list_screen.dart';
+import 'package:ieum_mobile/features/group/presentation/invite_code_screen.dart';
+import 'package:ieum_mobile/features/group/presentation/join_screen.dart';
+import 'package:ieum_mobile/features/group/presentation/pending_requests_screen.dart';
+import 'package:ieum_mobile/features/group/presentation/support_screen.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 part 'app_router.g.dart';
@@ -24,6 +31,42 @@ GoRouter appRouter(Ref ref) {
       GoRoute(
         path: '/sessions',
         builder: (context, state) => const SessionsScreen(),
+      ),
+      GoRoute(
+        path: '/groups',
+        builder: (context, state) => const GroupListScreen(),
+        routes: [
+          GoRoute(
+            path: 'create',
+            builder: (context, state) => const CreateGroupScreen(),
+          ),
+          GoRoute(
+            path: 'join',
+            builder: (context, state) => const JoinScreen(),
+          ),
+          GoRoute(
+            path: ':groupId',
+            builder: (context, state) =>
+                GroupDetailScreen(groupId: state.pathParameters['groupId']!),
+            routes: [
+              GoRoute(
+                path: 'code',
+                builder: (context, state) =>
+                    InviteCodeScreen(groupId: state.pathParameters['groupId']!),
+              ),
+              GoRoute(
+                path: 'requests',
+                builder: (context, state) =>
+                    PendingRequestsScreen(groupId: state.pathParameters['groupId']!),
+              ),
+              GoRoute(
+                path: 'support',
+                builder: (context, state) =>
+                    SupportScreen(groupId: state.pathParameters['groupId']!),
+              ),
+            ],
+          ),
+        ],
       ),
       GoRoute(
         path: '/invite',
