@@ -1,7 +1,10 @@
 package com.ieum.backend.global.exception;
 
+import com.ieum.backend.domain.auth.service.AccountPendingDeletionException;
 import com.ieum.backend.global.common.ApiResponse;
 import jakarta.validation.ConstraintViolationException;
+import java.time.Instant;
+import java.util.Map;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
@@ -30,6 +33,21 @@ public class GlobalExceptionHandler {
         return ResponseEntity
             .status(errorCode.getHttpStatus())
             .body(ApiResponse.error(errorCode, e.getMessage()));
+    }
+
+    @ExceptionHandler(AccountPendingDeletionException.class)
+    public ResponseEntity<ApiResponse<Map<String, Instant>>> handleAccountPendingDeletion(
+        AccountPendingDeletionException e
+    ) {
+        ErrorCode errorCode = e.getErrorCode();
+        return ResponseEntity
+            .status(errorCode.getHttpStatus())
+            .body(new ApiResponse<>(
+                errorCode.getCode(),
+                errorCode.getMessage(),
+                Map.of("restorableUntil", e.getRestorableUntil()),
+                Instant.now()
+            ));
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)

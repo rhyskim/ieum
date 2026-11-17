@@ -11,7 +11,6 @@ import com.ieum.backend.domain.common.enums.GroupPlanTier;
 import com.ieum.backend.domain.common.enums.MemberRole;
 import com.ieum.backend.domain.common.enums.MemberStatus;
 import com.ieum.backend.domain.common.enums.MembershipTier;
-import com.ieum.backend.domain.common.enums.OAuthProvider;
 import com.ieum.backend.domain.common.enums.QuestionCategory;
 import com.ieum.backend.domain.common.enums.RevealStatus;
 import com.ieum.backend.domain.entitlement.config.EntitlementPolicyProperties;
@@ -55,7 +54,7 @@ class CoreDomainInvariantsTest {
     @Test
     @DisplayName("불변식 1: 전원 답변 시 즉시 REVEALED_ALL 로 전환되고, REVEALED_TIMEOUT 이후 지각 답변 시 revealedAt 을 보존하며 REVEALED_ALL 로 승격된다")
     void dailyQuestionRevealAllAndLatePromotionInvariants() {
-        User creator = User.create(OAuthProvider.KAKAO, "kakao-1", "parent@ieum.app", "어머니", MemberRole.PARENT);
+        User creator = User.create("parent@ieum.app", "어머니", MemberRole.PARENT);
         FamilyGroup group = FamilyGroup.create("우리 가족", creator);
         Question question = Question.create(1, QuestionCategory.MEMORY, "가장 기억에 남는 가족 여행은 언제인가요?", null, null);
         LocalDate cycleDate = LocalDate.of(2026, 11, 2);
@@ -89,7 +88,7 @@ class CoreDomainInvariantsTest {
     @Test
     @DisplayName("불변식 2: 익일 16:59:59 KST 에는 LOCKED 를 유지하고, 17:00:00 KST 도래 시 최소 1명 이상 답변했을 때만 REVEALED_TIMEOUT 으로 전환된다")
     void dailyQuestionTimeoutRevealBoundaryInvariants() {
-        User creator = User.create(OAuthProvider.KAKAO, "kakao-1", "parent@ieum.app", "어머니", MemberRole.PARENT);
+        User creator = User.create("parent@ieum.app", "어머니", MemberRole.PARENT);
         FamilyGroup group = FamilyGroup.create("우리 가족", creator);
         Question question = Question.create(1, QuestionCategory.DAILY, "오늘 하루 가장 기분 좋았던 일은 무엇인가요?", null, null);
         LocalDate cycleDate = LocalDate.of(2026, 11, 2);
@@ -165,7 +164,7 @@ class CoreDomainInvariantsTest {
     @Test
     @DisplayName("불변식 4: 30일 음성 만료(ACTIVE -> EXPIRING_NOTIFIED -> EXPIRED_DELETED) 시 텍스트(textContent, sttRawText)는 100% 보존되고, PERMANENT/NONE 만료 시도 시 409 예외가 발생한다")
     void audioLifecycleStateTransitionAndTextPreservationInvariants() {
-        User user = User.create(OAuthProvider.KAKAO, "kakao-2", "parent@ieum.app", "아버지", MemberRole.PARENT);
+        User user = User.create("parent@ieum.app", "아버지", MemberRole.PARENT);
         FamilyGroup group = FamilyGroup.create("우리 가족", user);
         Question question = Question.create(2, QuestionCategory.GRATITUDE, "자녀에게 가장 고마웠던 순간은 언제인가요?", null, null);
         DailyQuestion dq = DailyQuestion.create(group, question, LocalDate.of(2026, 11, 2));

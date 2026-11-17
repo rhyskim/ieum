@@ -28,6 +28,7 @@ val awsSdkVersion = "2.28.29"
 val shedlockVersion = "5.16.0"
 val firebaseAdminVersion = "9.4.1"
 val springdocVersion = "2.6.0"
+val jjwtVersion = "0.12.6"
 
 dependencies {
     implementation("org.springframework.boot:spring-boot-starter-web")
@@ -37,6 +38,11 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-security")
     implementation("org.springframework.boot:spring-boot-starter-aop")
     implementation("org.springframework.boot:spring-boot-starter-actuator")
+
+    implementation("io.jsonwebtoken:jjwt-api:${jjwtVersion}")
+    runtimeOnly("io.jsonwebtoken:jjwt-impl:${jjwtVersion}")
+    runtimeOnly("io.jsonwebtoken:jjwt-jackson:${jjwtVersion}")
+    implementation("org.springframework.security:spring-security-oauth2-jose")
 
     runtimeOnly("org.postgresql:postgresql")
     implementation("org.flywaydb:flyway-core")

@@ -55,7 +55,17 @@ aws:
 
 # 서버 주도형 Feature Entitlement 정책 설정 (v1은 FREE 플랜 활성, 향후 PREMIUM 확장 대비)
 # voiceServerRetentionDays = 36500 은 약 100년(사실상 서버 영구 보관)을 의미하는 상수값입니다.
+# 인증 (ADR-0001): Access 30분 / Refresh 60일 슬라이딩. 비밀값은 환경변수로만 주입한다.
 ieum:
+  auth:
+    jwt-secret: ${JWT_SECRET:}
+    access-ttl: 30m
+    refresh-ttl: 60d
+    refresh-reuse-leeway: 10s
+    social:
+      kakao-app-id: ${KAKAO_APP_ID:}
+      apple-client-id: ${APPLE_CLIENT_ID:}
+      timeout: 3s
   entitlement:
     default-plan: FREE
     plans:

@@ -8,3 +8,7 @@ spring:
     redis:
       host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:16379}
+ieum:
+  auth:
+    # 로컬 개발 전용 값. 운영은 반드시 JWT_SECRET 환경변수로 주입한다.
+    jwt-secret: ${JWT_SECRET:local-dev-only-secret-change-me-0123456789}
