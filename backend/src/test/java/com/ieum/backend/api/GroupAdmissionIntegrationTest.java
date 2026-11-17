@@ -228,6 +228,35 @@ class GroupAdmissionIntegrationTest {
         assertThat(statusOf(groupId, kicked)).isEqualTo("REMOVED");
     }
 
+    @Test
+    @DisplayName("방장 전용 API(대기 목록·거절·강퇴·코드 조회)는 일반 멤버와 다른 그룹 방장에게 403이고, 방장은 본인을 강퇴할 수 없다")
+    void ownerOnlyEndpointsRejectOthers() throws Exception {
+        UUID owner = newUser("방장");
+        UUID otherOwner = newUser("다른방장");
+        UUID groupId = createGroup(owner);
+        createGroup(otherOwner);
+        UUID member = addMember(groupId, "ACTIVE", "now()");
+        UUID pending = addMember(groupId, "PENDING", "now()");
+        issueCode(owner, groupId);
+
+        for (UUID intruder : List.of(member, otherOwner)) {
+            assertThat(mockMvc.perform(get("/api/v1/groups/" + groupId + "/join-requests")
+                .header("Authorization", bearer(intruder))).andReturn().getResponse().getStatus()).isEqualTo(403);
+            assertThat(mockMvc.perform(get("/api/v1/groups/" + groupId + "/invite-code")
+                .header("Authorization", bearer(intruder))).andReturn().getResponse().getStatus()).isEqualTo(403);
+            assertThat(postStatus(intruder, "/api/v1/groups/" + groupId + "/join-requests/" + pending + "/reject"))
+                .isEqualTo(403);
+            assertThat(mockMvc.perform(delete("/api/v1/groups/" + groupId + "/members/" + member)
+                .header("Authorization", bearer(intruder))).andReturn().getResponse().getStatus()).isEqualTo(403);
+        }
+        assertThat(statusOf(groupId, pending)).isEqualTo("PENDING");
+        assertThat(statusOf(groupId, member)).isEqualTo("ACTIVE");
+
+        assertThat(mockMvc.perform(delete("/api/v1/groups/" + groupId + "/members/" + owner)
+            .header("Authorization", bearer(owner))).andReturn().getResponse().getStatus()).isEqualTo(400);
+        assertThat(statusOf(groupId, owner)).isEqualTo("ACTIVE");
+    }
+
     // ---------- 인원 상한 동시성 ----------
 
     @Test

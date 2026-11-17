@@ -35,7 +35,7 @@ CREATE TABLE join_attempt_state (
     lock_count INT NOT NULL DEFAULT 0,
     lock_count_started_at TIMESTAMPTZ,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    CONSTRAINT chk_join_fail_count CHECK (fail_count BETWEEN 0 AND 5),
+    CONSTRAINT chk_join_fail_count CHECK (fail_count >= 0),
     CONSTRAINT chk_join_lock_count CHECK (lock_count >= 0)
 );
 

@@ -69,7 +69,10 @@ public class JoinAttemptGuard {
     private void recordFailure(UUID userId, State state, Instant now) {
         Instant windowStart = state.windowStartedAt();
         int failCount = state.failCount();
-        if (windowStart == null || !windowStart.plus(properties.joinFailureWindow()).isAfter(now)) {
+        // 여기까지 왔다면 잠금 중이 아니다. 이미 상한에 닿았던 횟수는 잠금을 치른 것이므로 새 창으로 센다.
+        if (windowStart == null
+            || !windowStart.plus(properties.joinFailureWindow()).isAfter(now)
+            || failCount >= properties.joinMaxFailures()) {
             windowStart = now;
             failCount = 0;
         }

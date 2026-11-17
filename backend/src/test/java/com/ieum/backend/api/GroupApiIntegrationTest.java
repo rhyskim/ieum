@@ -1,6 +1,12 @@
 package com.ieum.backend.api;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.clearInvocations;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -12,6 +18,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ieum.backend.domain.common.enums.MemberRole;
 import com.ieum.backend.domain.common.enums.MembershipTier;
+import com.ieum.backend.domain.group.notify.GroupNotifier;
 import com.ieum.backend.domain.user.entity.User;
 import com.ieum.backend.global.security.JwtProvider;
 import jakarta.persistence.EntityManager;
@@ -32,6 +39,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -65,6 +73,8 @@ class GroupApiIntegrationTest {
     private JwtProvider jwtProvider;
     @PersistenceContext
     private EntityManager em;
+    @MockBean
+    private GroupNotifier notifier;
 
     // ---------- helpers ----------
 
@@ -478,6 +488,87 @@ class GroupApiIntegrationTest {
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"message\":\"침입\"}"))
             .andExpect(status().isForbidden());
+    }
+
+    @Test
+    @DisplayName("새 입장 요청은 방장에게 알림 포트를 한 번 호출하고, 멱등 재요청은 다시 알리지 않는다")
+    void ownerIsNotifiedOnceOnNewRequest() throws Exception {
+        UUID owner = newUser("알림방장");
+        UUID joiner = newUser("알림입장자");
+        UUID groupId = createGroup(owner, "가족", "방장");
+        String code = issueCode(owner, groupId);
+
+        join(joiner, code, "나");
+        join(joiner, code, "나");
+
+        verify(notifier, times(1)).joinRequested(eq(groupId), eq(owner), eq(joiner));
+    }
+
+    @Test
+    @DisplayName("LEFT 사용자의 동시 재요청 2건 → 행 1개, 둘 다 성공, 알림은 한 번만 간다")
+    void concurrentRejoinOfLeftUserNotifiesOnce() throws Exception {
+        UUID owner = newUser("방장");
+        UUID joiner = newUser("재입장자");
+        UUID groupId = createGroup(owner, "가족", "방장");
+        String code = issueCode(owner, groupId);
+        join(joiner, code, "나");
+        jdbc.update("update group_members set status = 'LEFT', left_at = now() where group_id = ? and user_id = ?",
+            groupId, joiner);
+        clearInvocations(notifier);
+
+        ExecutorService pool = Executors.newFixedThreadPool(2);
+        CyclicBarrier barrier = new CyclicBarrier(2);
+        try {
+            List<Future<Integer>> results = List.of(
+                pool.submit(() -> {
+                    barrier.await();
+                    return join(joiner, code, "나").getResponse().getStatus();
+                }),
+                pool.submit(() -> {
+                    barrier.await();
+                    return join(joiner, code, "나").getResponse().getStatus();
+                }));
+            for (Future<Integer> f : results) {
+                assertThat(f.get(30, TimeUnit.SECONDS)).isEqualTo(200);
+            }
+        } finally {
+            pool.shutdownNow();
+        }
+        Integer rows = jdbc.queryForObject(
+            "select count(*) from group_members where group_id = ? and user_id = ?", Integer.class, groupId, joiner);
+        assertThat(rows).isEqualTo(1);
+        assertThat(memberStatus(groupId, joiner)).isEqualTo("PENDING");
+        verify(notifier, times(1)).joinRequested(any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("입장 실패(없는 코드)에는 알림이 가지 않는다")
+    void failedJoinDoesNotNotify() throws Exception {
+        UUID joiner = newUser("실패자");
+
+        join(joiner, "000000", "나");
+
+        verify(notifier, never()).joinRequested(any(), any(), eq(joiner));
+    }
+
+    @Test
+    @DisplayName("폐기된 코드의 번호는 다른 그룹의 활성 코드로 다시 쓸 수 있다")
+    void inactiveCodeNumberCanBeReused() throws Exception {
+        UUID owner1 = newUser("방장1");
+        UUID owner2 = newUser("방장2");
+        UUID g1 = createGroup(owner1, "가족1", "나");
+        UUID g2 = createGroup(owner2, "가족2", "나");
+        issueCode(owner1, g1);
+        String oldCode = jdbc.queryForObject(
+            "select invite_code from group_invites where group_id = ? and is_active", String.class, g1);
+        issueCode(owner1, g1); // 이전 코드 폐기
+        issueCode(owner2, g2);
+
+        jdbc.update("update group_invites set invite_code = ? where group_id = ? and is_active", oldCode, g2);
+
+        String reused = jdbc.queryForObject(
+            "select invite_code from group_invites where group_id = ? and is_active", String.class, g2);
+        assertThat(reused).isEqualTo(oldCode);
     }
 
     @Test

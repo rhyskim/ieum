@@ -102,6 +102,8 @@ class GroupDetailScreen extends ConsumerWidget {
 
 enum _AliasChoice { save, clear }
 
+final ButtonStyle _dialogButtonStyle = TextButton.styleFrom(minimumSize: const Size(88, 56));
+
 class _AliasResult {
   const _AliasResult(this.choice, this.text);
 
@@ -141,14 +143,17 @@ class _AliasDialogState extends State<_AliasDialog> {
       actions: <Widget>[
         if (widget.member.alias != null)
           TextButton(
+            style: _dialogButtonStyle,
             onPressed: () => Navigator.of(context).pop(const _AliasResult(_AliasChoice.clear, '')),
             child: const Text('호칭 지우기', style: TextStyle(fontSize: 18)),
           ),
         TextButton(
+          style: _dialogButtonStyle,
           onPressed: () => Navigator.of(context).pop(),
           child: const Text('취소', style: TextStyle(fontSize: 18)),
         ),
         TextButton(
+          style: _dialogButtonStyle,
           onPressed: () =>
               Navigator.of(context).pop(_AliasResult(_AliasChoice.save, _controller.text.trim())),
           child: const Text('저장', style: TextStyle(fontSize: 18)),

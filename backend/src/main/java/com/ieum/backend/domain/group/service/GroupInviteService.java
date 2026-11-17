@@ -1,5 +1,6 @@
 package com.ieum.backend.domain.group.service;
 
+import com.ieum.backend.domain.common.enums.GroupStatus;
 import com.ieum.backend.domain.common.enums.MemberStatus;
 import com.ieum.backend.domain.group.config.GroupProperties;
 import com.ieum.backend.domain.group.dto.GroupDtos.InviteCodeResponse;
@@ -48,11 +49,16 @@ public class GroupInviteService {
      * 동시 재발급으로 유니크 위반이 나면 새 트랜잭션에서 다시 시도한다.
      */
     public InviteCodeResponse issue(UUID groupId, UUID userId) {
-        groupService.requireOwner(groupId, userId);
         for (int attempt = 1; attempt <= MAX_ISSUE_ATTEMPTS; attempt++) {
             try {
                 return tx.execute(status -> {
-                    FamilyGroup group = groupRepository.getReferenceById(groupId);
+                    // 방장 이탈·해산과 직렬화하려고 그룹 행을 잠근 뒤 방장 자격과 그룹 상태를 확인한다.
+                    FamilyGroup group = groupRepository.findByIdForUpdate(groupId)
+                        .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND));
+                    groupService.requireOwner(groupId, userId);
+                    if (group.getStatus() != GroupStatus.ACTIVE) {
+                        throw new BusinessException(ErrorCode.RESOURCE_NOT_FOUND);
+                    }
                     User inviter = userRepository.getReferenceById(userId);
                     inviteRepository.deactivateActiveByGroupId(groupId);
                     GroupInvite invite = inviteRepository.saveAndFlush(GroupInvite.create(
@@ -106,11 +112,16 @@ public class GroupInviteService {
 
     private JoinOutcome applyJoin(UUID groupId, UUID userId, String nickname) {
         Instant now = Instant.now();
+        // 승인·이탈·해산과 줄을 세우고(해산된 그룹에는 요청을 만들지 않는다), 같은 사용자의 동시 요청도 직렬화한다.
+        FamilyGroup group = groupRepository.findByIdForUpdate(groupId)
+            .orElseThrow(() -> new BusinessException(ErrorCode.INVITE_CODE_NOT_FOUND));
+        if (group.getStatus() != GroupStatus.ACTIVE) {
+            throw new BusinessException(ErrorCode.INVITE_CODE_NOT_FOUND);
+        }
         Optional<GroupMember> existing = memberRepository.findByGroup_IdAndUser_Id(groupId, userId);
         if (existing.isEmpty()) {
             User user = userRepository.findById(userId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.UNAUTHORIZED));
-            FamilyGroup group = groupRepository.getReferenceById(groupId);
             memberRepository.saveAndFlush(GroupMember.createPending(
                 group, user, user.getDefaultRole(), GroupService.resolveNickname(nickname, user), now));
             return new JoinOutcome(MemberStatus.PENDING, true);
