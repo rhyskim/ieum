@@ -5,11 +5,21 @@ class ApiException implements Exception {
     required this.code,
     required this.message,
     this.statusCode,
+    this.data,
   });
 
   final String code;
   final String message;
   final int? statusCode;
+
+  /// 에러 응답 봉투의 `data`(예: `ACCOUNT_PENDING_DELETION`의 `restorableUntil`). 없으면 null.
+  final Map<String, dynamic>? data;
+
+  /// 탈퇴 유예 계정의 복구 마감 시각. 응답에 없거나 형식이 틀리면 null.
+  DateTime? get restorableUntil {
+    final Object? raw = data?['restorableUntil'];
+    return raw is String ? DateTime.tryParse(raw) : null;
+  }
 
   factory ApiException.fromDioException(DioException error) {
     final int? statusCode = error.response?.statusCode;
@@ -19,10 +29,12 @@ class ApiException implements Exception {
       final Object? rawCode = data['code'];
       final Object? rawMessage = data['message'];
       if (rawCode is String && rawMessage is String) {
+        final Object? rawData = data['data'];
         return ApiException(
           code: rawCode,
           message: rawMessage,
           statusCode: statusCode,
+          data: rawData is Map<String, dynamic> ? rawData : null,
         );
       }
     }

@@ -72,6 +72,45 @@ void main() {
       );
     });
 
+    test('에러 응답의 data(restorableUntil)를 ApiException이 보존한다', () {
+      final req = RequestOptions(path: '/api/v1/auth/kakao');
+      final ex = ApiException.fromDioException(
+        DioException(
+          requestOptions: req,
+          type: DioExceptionType.badResponse,
+          response: Response<dynamic>(
+            requestOptions: req,
+            statusCode: 403,
+            data: <String, dynamic>{
+              'code': 'ACCOUNT_PENDING_DELETION',
+              'message': '탈퇴 처리 중인 계정입니다.',
+              'data': <String, dynamic>{'restorableUntil': '2026-12-17T00:00:00Z'},
+            },
+          ),
+        ),
+      );
+      expect(ex.code, 'ACCOUNT_PENDING_DELETION');
+      expect(ex.data?['restorableUntil'], '2026-12-17T00:00:00Z');
+      expect(ex.restorableUntil, DateTime.utc(2026, 12, 17));
+    });
+
+    test('data가 없거나 객체가 아니면 data는 null이고 restorableUntil도 null이다', () {
+      final req = RequestOptions(path: '/x');
+      final ex = ApiException.fromDioException(
+        DioException(
+          requestOptions: req,
+          type: DioExceptionType.badResponse,
+          response: Response<dynamic>(
+            requestOptions: req,
+            statusCode: 409,
+            data: <String, dynamic>{'code': 'GROUP_FULL', 'message': '가득 참', 'data': null},
+          ),
+        ),
+      );
+      expect(ex.data, isNull);
+      expect(ex.restorableUntil, isNull);
+    });
+
     test('DioException(connectionTimeout / connectionError / 502 non-JSON) 을 한글 메시지로 매핑한다', () {
       final req = RequestOptions(path: '/api/v1/health');
 

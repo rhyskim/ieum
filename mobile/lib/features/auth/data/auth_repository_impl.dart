@@ -22,10 +22,45 @@ class AuthRepositoryImpl implements AuthRepository {
   final Future<String?> Function()? _readFcmToken;
 
   @override
-  Future<bool> login(SocialProvider provider, String socialToken, {String? deviceLabel}) async {
+  Future<bool> login(SocialProvider provider, String socialToken, {String? deviceLabel}) =>
+      _authenticate('/api/v1/auth/${provider.pathSegment}', socialToken, deviceLabel);
+
+  @override
+  Future<void> restore(SocialProvider provider, String socialToken, {String? deviceLabel}) =>
+      _authenticate('/api/v1/auth/${provider.pathSegment}/restore', socialToken, deviceLabel);
+
+  @override
+  Future<List<LinkedIdentity>> fetchIdentities() async {
+    final Object? data = await _send(
+      () => _dio.get<Map<String, dynamic>>('/api/v1/auth/identities'),
+    );
+    return (data! as List<dynamic>)
+        .map((dynamic e) => LinkedIdentity.fromJson(e as Map<String, dynamic>))
+        .toList();
+  }
+
+  @override
+  Future<void> linkIdentity(SocialProvider provider, String socialToken) async {
+    await _send(
+      () => _dio.post<Map<String, dynamic>>(
+        '/api/v1/auth/identities/${provider.pathSegment}',
+        data: <String, String>{'token': socialToken},
+      ),
+    );
+  }
+
+  @override
+  Future<void> unlinkIdentity(SocialProvider provider) async {
+    await _send(
+      () => _dio.delete<Map<String, dynamic>>('/api/v1/auth/identities/${provider.pathSegment}'),
+    );
+  }
+
+  /// 로그인·복구는 같은 요청 본문과 응답(토큰)을 쓴다. 신규 가입이면 true.
+  Future<bool> _authenticate(String path, String socialToken, String? deviceLabel) async {
     final Map<String, dynamic> data = await _send(
       () => _dio.post<Map<String, dynamic>>(
-        '/api/v1/auth/${provider.pathSegment}',
+        path,
         data: <String, dynamic>{
           'token': socialToken,
           'deviceLabel': deviceLabel ?? _defaultDeviceLabel(),
