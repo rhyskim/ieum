@@ -149,4 +149,25 @@ public class GroupMember {
         this.status = MemberStatus.LEFT;
         this.leftAt = leftAt;
     }
+
+    /** 방장 승인: PENDING → ACTIVE. 가입 일시는 승인 시점이다(방장 위임 순서 기준). */
+    public void approve(Instant approvedAt) {
+        this.status = MemberStatus.ACTIVE;
+        this.joinedAt = approvedAt;
+    }
+
+    /** 거절은 LEFT로 돌려 보낸다. 거절된 사용자는 다시 요청할 수 있다. */
+    public void reject(Instant at) {
+        leave(at);
+    }
+
+    /** 강퇴: 코드로 재입장할 수 없다. */
+    public void remove(Instant removedAt) {
+        this.status = MemberStatus.REMOVED;
+        this.leftAt = removedAt;
+    }
+
+    public void changeOwner(boolean owner) {
+        this.owner = owner;
+    }
 }

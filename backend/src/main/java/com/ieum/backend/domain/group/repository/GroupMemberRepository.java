@@ -14,6 +14,11 @@ public interface GroupMemberRepository extends JpaRepository<GroupMember, UUID> 
 
     boolean existsByGroup_IdAndUser_IdAndStatusAndOwnerTrue(UUID groupId, UUID userId, MemberStatus status);
 
+    long countByGroup_IdAndStatus(UUID groupId, MemberStatus status);
+
+    @EntityGraph(attributePaths = "user")
+    List<GroupMember> findAllByGroup_IdAndStatusOrderByRequestedAtAsc(UUID groupId, MemberStatus status);
+
     Optional<GroupMember> findByGroup_IdAndUser_Id(UUID groupId, UUID userId);
 
     Optional<GroupMember> findFirstByGroup_IdAndStatusAndOwnerTrue(UUID groupId, MemberStatus status);

@@ -52,6 +52,13 @@ public final class GroupDtos {
     public record JoinResponse(MemberStatus status) {
     }
 
+    public record PendingRequestResponse(UUID userId, String familyNickname, Instant requestedAt, Instant expiresAt) {
+    }
+
+    /** successorUserId가 없으면 가장 오래된 ACTIVE 멤버에게 방장을 넘긴다. */
+    public record LeaveRequest(UUID successorUserId) {
+    }
+
     public record AliasRequest(
         @NotBlank(message = "호칭을 입력해 주세요.") @Size(max = 40, message = "호칭은 40자 이하로 입력해 주세요.") String alias
     ) {

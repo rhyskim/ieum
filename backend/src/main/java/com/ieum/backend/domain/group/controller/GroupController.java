@@ -7,9 +7,12 @@ import com.ieum.backend.domain.group.dto.GroupDtos.GroupDetailResponse;
 import com.ieum.backend.domain.group.dto.GroupDtos.GroupSummaryResponse;
 import com.ieum.backend.domain.group.dto.GroupDtos.InviteCodeResponse;
 import com.ieum.backend.domain.group.dto.GroupDtos.JoinRequest;
+import com.ieum.backend.domain.group.dto.GroupDtos.LeaveRequest;
+import com.ieum.backend.domain.group.dto.GroupDtos.PendingRequestResponse;
 import com.ieum.backend.domain.group.dto.GroupDtos.JoinResponse;
 import com.ieum.backend.domain.group.dto.GroupDtos.SupportRequestBody;
 import com.ieum.backend.domain.group.service.GroupInviteService;
+import com.ieum.backend.domain.group.service.GroupMembershipService;
 import com.ieum.backend.domain.group.service.GroupService;
 import com.ieum.backend.domain.group.service.MemberAliasService;
 import com.ieum.backend.domain.group.service.SupportRequestService;
@@ -39,6 +42,7 @@ public class GroupController {
 
     private final GroupService groupService;
     private final GroupInviteService inviteService;
+    private final GroupMembershipService membershipService;
     private final MemberAliasService aliasService;
     private final SupportRequestService supportService;
 
@@ -133,6 +137,60 @@ public class GroupController {
         @Valid @RequestBody SupportRequestBody request
     ) {
         supportService.submit(groupId, user.userId(), request.message());
+        return ApiResponse.ok(null);
+    }
+
+    @GetMapping("/{groupId}/join-requests")
+    @GroupMemberOnly
+    public ApiResponse<List<PendingRequestResponse>> pendingRequests(
+        @AuthenticationPrincipal CurrentUser user,
+        @PathVariable UUID groupId
+    ) {
+        return ApiResponse.ok(membershipService.pendingRequests(groupId, user.userId()));
+    }
+
+    @PostMapping("/{groupId}/join-requests/{targetUserId}/approve")
+    @GroupMemberOnly
+    public ApiResponse<Void> approve(
+        @AuthenticationPrincipal CurrentUser user,
+        @PathVariable UUID groupId,
+        @PathVariable UUID targetUserId
+    ) {
+        membershipService.approve(groupId, user.userId(), targetUserId);
+        return ApiResponse.ok(null);
+    }
+
+    @PostMapping("/{groupId}/join-requests/{targetUserId}/reject")
+    @GroupMemberOnly
+    public ApiResponse<Void> reject(
+        @AuthenticationPrincipal CurrentUser user,
+        @PathVariable UUID groupId,
+        @PathVariable UUID targetUserId
+    ) {
+        membershipService.reject(groupId, user.userId(), targetUserId);
+        return ApiResponse.ok(null);
+    }
+
+    @DeleteMapping("/{groupId}/members/{targetUserId}")
+    @GroupMemberOnly
+    public ApiResponse<Void> removeMember(
+        @AuthenticationPrincipal CurrentUser user,
+        @PathVariable UUID groupId,
+        @PathVariable UUID targetUserId
+    ) {
+        membershipService.remove(groupId, user.userId(), targetUserId);
+        return ApiResponse.ok(null);
+    }
+
+    /** 그룹 이탈. 방장이면 body의 successorUserId(선택)에게 위임한다. */
+    @PostMapping("/{groupId}/leave")
+    @GroupMemberOnly
+    public ApiResponse<Void> leave(
+        @AuthenticationPrincipal CurrentUser user,
+        @PathVariable UUID groupId,
+        @RequestBody(required = false) LeaveRequest request
+    ) {
+        membershipService.leave(groupId, user.userId(), request == null ? null : request.successorUserId());
         return ApiResponse.ok(null);
     }
 }

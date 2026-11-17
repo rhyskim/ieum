@@ -34,7 +34,9 @@ CREATE TABLE join_attempt_state (
     locked_until TIMESTAMPTZ,
     lock_count INT NOT NULL DEFAULT 0,
     lock_count_started_at TIMESTAMPTZ,
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    CONSTRAINT chk_join_fail_count CHECK (fail_count BETWEEN 0 AND 5),
+    CONSTRAINT chk_join_lock_count CHECK (lock_count >= 0)
 );
 
 -- 이상 사용자 기록(자동 차단 없음).

@@ -39,6 +39,7 @@ public class GroupInviteService {
     private final GroupService groupService;
     private final GroupProperties properties;
     private final GroupNotifier notifier;
+    private final JoinAttemptGuard joinAttemptGuard;
     private final TransactionTemplate tx;
     private final SecureRandom random = new SecureRandom();
 
@@ -78,12 +79,15 @@ public class GroupInviteService {
      * 응답에는 그룹 정보를 싣지 않는다.
      */
     public JoinResponse join(UUID userId, String code, String nickname) {
-        GroupInvite invite = inviteRepository.findByInviteCodeAndActiveTrue(code)
-            .orElseThrow(() -> new BusinessException(ErrorCode.INVITE_CODE_NOT_FOUND));
-        if (!invite.getExpiresAt().isAfter(Instant.now())) {
-            throw new BusinessException(ErrorCode.INVITE_CODE_EXPIRED);
-        }
-        UUID groupId = invite.getGroup().getId();
+        // 잠금 확인 → 코드 검증 → 실패 기록 순서는 JoinAttemptGuard가 보장한다.
+        UUID groupId = joinAttemptGuard.attempt(userId, () -> {
+            GroupInvite invite = inviteRepository.findByInviteCodeAndActiveTrue(code)
+                .orElseThrow(() -> new BusinessException(ErrorCode.INVITE_CODE_NOT_FOUND));
+            if (!invite.getExpiresAt().isAfter(Instant.now())) {
+                throw new BusinessException(ErrorCode.INVITE_CODE_EXPIRED);
+            }
+            return invite.getGroup().getId();
+        });
 
         JoinOutcome outcome;
         try {
