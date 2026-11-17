@@ -1,5 +1,6 @@
 package com.ieum.backend.domain.auth.dto;
 
+import com.ieum.backend.domain.common.enums.OAuthProvider;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 import java.time.Instant;
@@ -33,6 +34,9 @@ public final class AuthDtos {
         long accessExpiresInSeconds,
         boolean newUser
     ) {
+    }
+
+    public record IdentityResponse(OAuthProvider provider, Instant linkedAt) {
     }
 
     /** id는 기기 세션(refresh family) 식별자다. Rotation으로 토큰이 바뀌어도 변하지 않는다. */
