@@ -1,0 +1,10 @@
+spring:
+  datasource:
+    url: jdbc:postgresql://${POSTGRES_HOST:localhost}:${POSTGRES_PORT:15432}/${POSTGRES_DB:ieum_local}
+    username: ${POSTGRES_USER:ieum_user}
+    password: ${POSTGRES_PASSWORD:ieum_pass_local}
+    driver-class-name: org.postgresql.Driver
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:16379}

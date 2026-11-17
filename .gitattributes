@@ -1,0 +1,47 @@
+# 기본 모든 텍스트 파일 LF 정규화
+* text=auto eol=lf
+
+# 소스 코드 및 설정 파일 명시적 LF 강제
+*.java text eol=lf
+*.kt text eol=lf
+*.kts text eol=lf
+*.dart text eol=lf
+*.sql text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.json text eol=lf
+*.xml text eol=lf
+*.properties text eol=lf
+*.md text eol=lf
+*.sh text eol=lf
+gradlew text eol=lf
+
+# Windows 전용 스크립트는 CRLF 유지 (gradlew.bat 실행 오류 방지 필수)
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+
+# 바이너리 파일 변조 방지 (오디오, 이미지, 폰트, 아카이브, 인증서)
+*.jar binary
+*.war binary
+*.ear binary
+*.class binary
+*.m4a binary
+*.aac binary
+*.mp3 binary
+*.wav binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.ico binary
+*.ttf binary
+*.otf binary
+*.woff binary
+*.woff2 binary
+*.jks binary
+*.keystore binary
+*.p12 binary
+*.p8 binary
+*.mobileprovision binary

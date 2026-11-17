@@ -1,0 +1,92 @@
+# ==========================================
+# 1. Environment & Secrets (SECURITY CRITICAL)
+# ==========================================
+.env
+.env.*
+!.env.example
+**/firebase-adminsdk-*.json
+**/service-account*.json
+**/*.p8
+**/*.p12
+**/*.jks
+**/*.keystore
+**/key.properties
+
+# ==========================================
+# 2. OS & IDE
+# ==========================================
+.DS_Store
+Thumbs.db
+Desktop.ini
+.idea/
+*.iml
+*.iws
+*.ipr
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+*.swp
+*~
+
+# ==========================================
+# 3. Docker Local Data
+# ==========================================
+.docker-data/
+
+# ==========================================
+# 4. Backend (Spring Boot / Java 21 / Gradle)
+# ==========================================
+backend/.gradle/
+backend/build/
+backend/bin/
+backend/out/
+backend/src/main/generated/
+*.jar
+!**/gradle/wrapper/gradle-wrapper.jar
+*.war
+*.class
+hs_err_pid*
+replay_pid*
+
+# ==========================================
+# 5. Mobile (Flutter / Dart / Android / iOS)
+# ==========================================
+mobile/.dart_tool/
+mobile/.flutter-plugins
+mobile/.flutter-plugins-dependencies
+mobile/.packages
+mobile/.pub-cache/
+mobile/.pub/
+mobile/build/
+mobile/coverage/
+
+# Flutter Codegen (build_runner로 생성)
+mobile/**/*.g.dart
+mobile/**/*.freezed.dart
+
+# Android Native
+mobile/android/.gradle/
+mobile/android/captures/
+mobile/android/local.properties
+mobile/android/GeneratedPluginRegistrant.java
+mobile/android/app/debug/
+mobile/android/app/profile/
+mobile/android/app/release/
+
+# iOS Native
+mobile/ios/Pods/
+mobile/ios/.symlinks/
+mobile/ios/Flutter/Flutter.framework
+mobile/ios/Flutter/Flutter.podspec
+mobile/ios/Flutter/Generated.xcconfig
+mobile/ios/Flutter/ephemeral/
+mobile/ios/Flutter/app.flx
+mobile/ios/Flutter/app.zip
+mobile/ios/Flutter/flutter_assets/
+mobile/ios/ServiceDefinitions.json
+
+# ==========================================
+# Worktrees (Worker 규칙 파일만 추적)
+# ==========================================
+.worktrees/*
+!.worktrees/CLAUDE.md

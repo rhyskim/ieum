@@ -1,0 +1,72 @@
+name: ieum
+
+services:
+  postgres:
+    image: postgres:16.6-alpine
+    container_name: ieum-postgres
+    restart: unless-stopped
+    ports:
+      - "${POSTGRES_PORT:-15432}:5432"
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-ieum_local}
+      POSTGRES_USER: ${POSTGRES_USER:-ieum_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-ieum_pass_local}
+      POSTGRES_INITDB_ARGS: "--encoding=UTF-8 --locale=C.UTF-8"
+      TZ: ${TZ:-Asia/Seoul}
+      PGTZ: ${TZ:-Asia/Seoul}
+    command:
+      - "postgres"
+      - "-c"
+      - "timezone=${TZ:-Asia/Seoul}"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./docker/postgres/init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER:-ieum_user} -d $${POSTGRES_DB:-ieum_local}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7.4-alpine
+    container_name: ieum-redis
+    restart: unless-stopped
+    ports:
+      - "${REDIS_PORT:-16379}:6379"
+    environment:
+      TZ: ${TZ:-Asia/Seoul}
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  localstack-s3:
+    image: localstack/localstack:3.8
+    container_name: ieum-s3
+    restart: unless-stopped
+    ports:
+      - "${S3_PORT:-4566}:4566"
+    environment:
+      SERVICES: s3
+      DEFAULT_REGION: ${S3_REGION:-ap-northeast-2}
+      AWS_DEFAULT_REGION: ${S3_REGION:-ap-northeast-2}
+      S3_BUCKET_NAME: ${S3_BUCKET_NAME:-ieum-voice-storage-local}
+      S3_EPHEMERAL_PREFIX: ${S3_EPHEMERAL_PREFIX:-audio/ephemeral-30d/}
+      TZ: ${TZ:-Asia/Seoul}
+    volumes:
+      - s3_data:/var/lib/localstack
+      - ./docker/localstack/init-s3.sh:/etc/localstack/init/ready.d/01-init-s3.sh:ro
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4566/_localstack/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  postgres_data:
+  redis_data:
+  s3_data:
