@@ -29,6 +29,14 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     private final JwtProvider jwtProvider;
     private final ObjectMapper objectMapper;
 
+    /** 로그인·복구·갱신은 공개 엔드포인트다. 기기에 남은 만료 Access가 붙어 와도 막지 않는다. */
+    @Override
+    protected boolean shouldNotFilter(HttpServletRequest request) {
+        String path = request.getRequestURI();
+        return path.equals("/api/v1/auth/refresh")
+            || path.matches("/api/v1/auth/(kakao|naver|apple)(/restore)?");
+    }
+
     @Override
     protected void doFilterInternal(
         HttpServletRequest request,

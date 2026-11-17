@@ -27,8 +27,10 @@ import java.util.Base64;
 import java.util.Comparator;
 import java.util.HexFormat;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.stream.Collectors;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -98,8 +100,7 @@ public class AuthService {
         return issueTokens(user, UUID.randomUUID(), request.deviceLabel(), newUser);
     }
 
-    /** 탈퇴 유예 중 계정 복구. 자동 복구가 아니라 소셜 토큰을 다시 검증한 요청에서만 수행한다. */
-    @Transactional
+    /** 탈퇴 유예 중 계정 복구. 자동 복구가 아니라 소셜 토큰을 다시 검증한 요청에서만 수행한다. 외부 호출 중 DB 커넥션을 잡지 않도록 트랜잭션을 두지 않는다. */
     public LoginResponse restore(OAuthProvider provider, SocialLoginRequest request) {
         SocialProfile profile = verify(provider, request.token());
         User user = identityRepository.findByProviderAndSubject(provider, profile.subject())
@@ -163,13 +164,23 @@ public class AuthService {
         return issueTokens(user, token.getFamilyId(), label, false);
     }
 
+    /** 기기 세션 목록. Rotation으로 family에 토큰이 여러 개 쌓이므로 family 단위로 합쳐 기기당 1건만 돌려준다. */
     @Transactional(readOnly = true)
     public List<SessionResponse> listSessions(UUID userId) {
-        return refreshTokenRepository
-            .findByUserIdAndUsedAtIsNullAndRevokedAtIsNullAndExpiresAtAfter(userId, Instant.now(clock))
+        Map<UUID, List<RefreshToken>> byFamily = refreshTokenRepository
+            .findByUserIdAndRevokedAtIsNullAndExpiresAtAfter(userId, Instant.now(clock))
             .stream()
-            .sorted(Comparator.comparing(RefreshToken::getCreatedAt).reversed())
-            .map(t -> new SessionResponse(t.getFamilyId(), t.getDeviceLabel(), t.getCreatedAt(), t.getLastUsedAt()))
+            .collect(Collectors.groupingBy(RefreshToken::getFamilyId));
+        return byFamily.entrySet().stream()
+            .map(e -> {
+                List<RefreshToken> tokens = e.getValue();
+                Instant first = tokens.stream().map(RefreshToken::getCreatedAt).min(Comparator.naturalOrder()).orElseThrow();
+                Instant last = tokens.stream().map(RefreshToken::getCreatedAt).max(Comparator.naturalOrder()).orElseThrow();
+                String label = tokens.stream().max(Comparator.comparing(RefreshToken::getCreatedAt))
+                    .map(RefreshToken::getDeviceLabel).orElse(null);
+                return new SessionResponse(e.getKey(), label, first, last);
+            })
+            .sorted(Comparator.comparing(SessionResponse::createdAt).reversed())
             .toList();
     }
 

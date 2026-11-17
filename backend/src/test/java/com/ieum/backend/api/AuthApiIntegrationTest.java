@@ -2,6 +2,7 @@ package com.ieum.backend.api;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -11,6 +12,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.ieum.backend.domain.auth.repository.UserIdentityRepository;
 import com.ieum.backend.domain.auth.social.AppleTokenVerifier;
 import com.ieum.backend.domain.auth.social.KakaoTokenVerifier;
 import com.ieum.backend.domain.auth.social.NaverTokenVerifier;
@@ -32,18 +34,23 @@ import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.Date;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.CyclicBarrier;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.boot.test.mock.mockito.SpyBean;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
+import org.springframework.data.jpa.repository.support.JpaRepositoryFactory;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
@@ -78,6 +85,8 @@ class AuthApiIntegrationTest {
     private EntityManager em;
 
     // 소셜 제공자 호출은 stub으로 대체한다(실제 키 없음).
+    @SpyBean
+    private UserIdentityRepository identityRepository;
     @MockBean
     private KakaoTokenVerifier kakao;
     @MockBean
@@ -97,6 +106,7 @@ class AuthApiIntegrationTest {
     private JsonNode login(String provider, String socialToken, String deviceLabel) throws Exception {
         MvcResult r = mockMvc.perform(post("/api/v1/auth/" + provider)
                 .contentType(MediaType.APPLICATION_JSON)
+                .characterEncoding(StandardCharsets.UTF_8)
                 .content(objectMapper.writeValueAsString(
                     new LoginBody(socialToken, null, deviceLabel))))
             .andExpect(status().isOk())
@@ -105,7 +115,7 @@ class AuthApiIntegrationTest {
     }
 
     private JsonNode data(MvcResult r) throws Exception {
-        return objectMapper.readTree(r.getResponse().getContentAsString()).path("data");
+        return objectMapper.readTree(r.getResponse().getContentAsString(StandardCharsets.UTF_8)).path("data");
     }
 
     private MvcResult refresh(String refreshToken) throws Exception {
@@ -162,26 +172,41 @@ class AuthApiIntegrationTest {
     // ---------- 수용 기준 3: 동시 가입 ----------
 
     @Test
-    @DisplayName("동일 (provider, subject) 동시 가입 2건 → 사용자 1명, 둘 다 성공")
+    @DisplayName("동일 (provider, subject) 동시 가입 2건 → 사용자 1명, 둘 다 성공(1건만 newUser=true)")
     void concurrentSignupCreatesSingleUser() throws Exception {
         String subject = "k-" + UUID.randomUUID();
         String token = "kakao-token-" + UUID.randomUUID();
-        CyclicBarrier barrier = new CyclicBarrier(2);
         when(kakao.provider()).thenReturn(OAuthProvider.KAKAO);
-        // 두 요청이 모두 검증을 통과한 뒤 동시에 가입을 시도하도록 맞춘다.
-        when(kakao.verify(token)).thenAnswer(inv -> {
-            barrier.await();
-            return new SocialProfile(subject, null, "동시가입");
-        });
+        when(kakao.verify(token)).thenReturn(new SocialProfile(subject, null, "동시가입"));
+
+        // 두 요청이 모두 "아직 가입 안 됨"으로 조회한 뒤 동시에 가입을 시도하도록 맞춘다.
+        // 그래야 늦게 커밋한 쪽이 유니크 제약 위반 → 재조회 복구 경로를 반드시 지난다.
+        UserIdentityRepository realIdentities = new JpaRepositoryFactory(em).getRepository(UserIdentityRepository.class);
+        CyclicBarrier afterLookup = new CyclicBarrier(2);
+        AtomicInteger lookups = new AtomicInteger();
+        doAnswer(inv -> {
+            if (lookups.incrementAndGet() <= 2) {
+                afterLookup.await(5, TimeUnit.SECONDS);
+                return Optional.empty();
+            }
+            // 인터페이스 spy는 실제 메서드를 못 부르므로, 같은 EntityManager로 만든 실제 레포지토리에 위임한다.
+            return realIdentities.findByProviderAndSubject(inv.getArgument(0), inv.getArgument(1));
+        }).when(identityRepository).findByProviderAndSubject(any(), any());
 
         ExecutorService pool = Executors.newFixedThreadPool(2);
         try {
-            List<Future<Integer>> results = List.of(
-                pool.submit(() -> loginStatus(token)),
-                pool.submit(() -> loginStatus(token)));
-            for (Future<Integer> f : results) {
-                assertThat(f.get()).isEqualTo(200);
+            List<Future<MvcResult>> results = List.of(
+                pool.submit(() -> loginResult(token)),
+                pool.submit(() -> loginResult(token)));
+            int newUsers = 0;
+            for (Future<MvcResult> f : results) {
+                MvcResult r = f.get();
+                assertThat(r.getResponse().getStatus()).isEqualTo(200);
+                if (data(r).path("newUser").asBoolean()) {
+                    newUsers++;
+                }
             }
+            assertThat(newUsers).isEqualTo(1);
         } finally {
             pool.shutdownNow();
         }
@@ -192,9 +217,9 @@ class AuthApiIntegrationTest {
             Integer.class, subject)).isEqualTo(1);
     }
 
-    private int loginStatus(String token) throws Exception {
+    private MvcResult loginResult(String token) throws Exception {
         return mockMvc.perform(post("/api/v1/auth/kakao").contentType(MediaType.APPLICATION_JSON)
-            .content("{\"token\":\"" + token + "\"}")).andReturn().getResponse().getStatus();
+            .content("{\"token\":\"" + token + "\"}")).andReturn();
     }
 
     // ---------- 수용 기준 4: Rotation / 재사용 탐지 ----------
@@ -413,5 +438,64 @@ class AuthApiIntegrationTest {
                 .content("{\"token\":\"" + token + "\"}"))
             .andExpect(status().isForbidden())
             .andExpect(jsonPath("$.code").value("ACCOUNT_RESTORE_EXPIRED"));
+    }
+
+    // ---------- 검수 반영 ----------
+
+    @Test
+    @DisplayName("만료된 Access 토큰이 헤더에 붙어 있어도 공개 로그인·갱신 엔드포인트는 막히지 않는다")
+    void expiredAccessTokenDoesNotBlockPublicAuthEndpoints() throws Exception {
+        String expired = Jwts.builder()
+            .subject(UUID.randomUUID().toString())
+            .claim("tier", MembershipTier.FREE.name())
+            .issuedAt(new Date(System.currentTimeMillis() - 3_600_000))
+            .expiration(new Date(System.currentTimeMillis() - 1_800_000))
+            .signWith(Keys.hmacShaKeyFor(jwtProperties.jwtSecret().getBytes(StandardCharsets.UTF_8)))
+            .compact();
+        String token = stubKakao("k-" + UUID.randomUUID());
+
+        mockMvc.perform(post("/api/v1/auth/kakao").header("Authorization", "Bearer " + expired)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"token\":\"" + token + "\"}"))
+            .andExpect(status().isOk());
+    }
+
+    @Test
+    @DisplayName("Apple 첫 로그인에서 앱이 보낸 이름이 저장된다")
+    void appleFirstLoginStoresClientProvidedName() throws Exception {
+        String subject = "a-" + UUID.randomUUID();
+        when(apple.provider()).thenReturn(OAuthProvider.APPLE);
+        when(apple.verify("apple-token")).thenReturn(new SocialProfile(subject, "me@privaterelay.test", null));
+
+        mockMvc.perform(post("/api/v1/auth/apple").contentType(MediaType.APPLICATION_JSON)
+                .characterEncoding(StandardCharsets.UTF_8)
+                .content("{\"token\":\"apple-token\",\"name\":\"김애플\"}"))
+            .andExpect(status().isOk());
+
+        assertThat(jdbc.queryForObject("select name from users where id = ?", String.class,
+            userIdOf("APPLE", subject))).isEqualTo("김애플");
+        assertThat(jdbc.queryForObject("select email from user_identities where subject = ?", String.class,
+            subject)).isEqualTo("me@privaterelay.test");
+    }
+
+    @Test
+    @DisplayName("Rotation 후에도 세션 목록은 기기당 1건이고 최초 로그인 시각이 유지되며 lastUsedAt이 채워진다")
+    void sessionListIsOnePerDeviceAfterRotation() throws Exception {
+        JsonNode login = login("kakao", stubKakao("k-" + UUID.randomUUID()), "내 폰");
+        MvcResult rotated = refresh(login.path("refreshToken").asText());
+        assertThat(rotated.getResponse().getStatus()).isEqualTo(200);
+        // 유예 내 재사용으로 같은 family에 미사용 토큰이 하나 더 생겨도 1건으로 보여야 한다.
+        assertThat(refresh(login.path("refreshToken").asText()).getResponse().getStatus()).isEqualTo(200);
+
+        MvcResult list = mockMvc.perform(get("/api/v1/auth/sessions")
+                .header("Authorization", "Bearer " + login.path("accessToken").asText()))
+            .andExpect(status().isOk()).andReturn();
+
+        assertThat(data(list)).hasSize(1);
+        JsonNode session = data(list).get(0);
+        assertThat(session.path("deviceLabel").asText()).isEqualTo("내 폰");
+        assertThat(session.path("lastUsedAt").isNull()).isFalse();
+        assertThat(Instant.parse(session.path("createdAt").asText()))
+            .isBefore(Instant.parse(session.path("lastUsedAt").asText()));
     }
 }

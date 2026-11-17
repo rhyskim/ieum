@@ -13,8 +13,8 @@ public interface RefreshTokenRepository extends JpaRepository<RefreshToken, UUID
 
     Optional<RefreshToken> findByTokenHash(String tokenHash);
 
-    /** 기기(family)별 현재 세션: 아직 사용·폐기되지 않았고 만료 전인 토큰. */
-    List<RefreshToken> findByUserIdAndUsedAtIsNullAndRevokedAtIsNullAndExpiresAtAfter(UUID userId, Instant now);
+    /** 폐기되지 않고 만료 전인 토큰 전부(기기 세션 집계용: 사용된 이전 토큰 포함). */
+    List<RefreshToken> findByUserIdAndRevokedAtIsNullAndExpiresAtAfter(UUID userId, Instant now);
 
     /** family 전체 폐기. 소유자(userId)가 일치할 때만 동작하므로 다른 사용자의 세션은 건드릴 수 없다. */
     @Modifying(clearAutomatically = true)
@@ -25,7 +25,7 @@ public interface RefreshTokenRepository extends JpaRepository<RefreshToken, UUID
     /** 원자적 사용 처리. 이미 사용됐으면 0행이 갱신되므로 동시 요청 중 정확히 한 건만 성공한다. */
     @Modifying(flushAutomatically = true, clearAutomatically = true)
     @Query("update RefreshToken t set t.usedAt = :now, t.lastUsedAt = :now "
-        + "where t.id = :id and t.usedAt is null")
+        + "where t.id = :id and t.usedAt is null and t.revokedAt is null and t.expiresAt > :now")
     int markUsed(UUID id, Instant now);
 
     /** 사용자의 모든 Refresh 폐기(탈퇴). */
