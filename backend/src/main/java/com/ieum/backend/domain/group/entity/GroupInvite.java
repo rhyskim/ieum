@@ -39,7 +39,7 @@ public class GroupInvite extends BaseCreatedEntity {
     private User inviter;
 
     @JdbcTypeCode(Types.CHAR)
-    @Column(name = "invite_code", length = 6, nullable = false, unique = true, columnDefinition = "char(6)")
+    @Column(name = "invite_code", length = 6, nullable = false, columnDefinition = "char(6)")
     private String inviteCode;
 
     @Column(name = "expires_at", nullable = false)

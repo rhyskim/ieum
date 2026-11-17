@@ -65,6 +65,11 @@ public class FamilyGroup extends BaseTimeEntity {
         return group;
     }
 
+    /** 혼자 남은 방장이 나가면 그룹을 해산한다. */
+    public void archive() {
+        this.status = GroupStatus.ARCHIVED;
+    }
+
     public int advanceQuestionSequence() {
         this.currentQuestionSeq += 1;
         return this.currentQuestionSeq;

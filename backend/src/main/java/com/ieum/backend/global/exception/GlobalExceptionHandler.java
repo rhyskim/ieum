@@ -1,6 +1,7 @@
 package com.ieum.backend.global.exception;
 
 import com.ieum.backend.domain.auth.service.AccountPendingDeletionException;
+import com.ieum.backend.domain.group.service.JoinLockedException;
 import com.ieum.backend.global.common.ApiResponse;
 import jakarta.validation.ConstraintViolationException;
 import java.time.Instant;
@@ -46,6 +47,21 @@ public class GlobalExceptionHandler {
                 errorCode.getCode(),
                 errorCode.getMessage(),
                 Map.of("restorableUntil", e.getRestorableUntil()),
+                Instant.now()
+            ));
+    }
+
+    @ExceptionHandler(JoinLockedException.class)
+    public ResponseEntity<ApiResponse<Map<String, Long>>> handleJoinLocked(JoinLockedException e) {
+        ErrorCode errorCode = e.getErrorCode();
+        long seconds = e.getRetryAfter().getSeconds();
+        return ResponseEntity
+            .status(errorCode.getHttpStatus())
+            .header("Retry-After", String.valueOf(seconds))
+            .body(new ApiResponse<>(
+                errorCode.getCode(),
+                e.getMessage(),
+                Map.of("retryAfterSeconds", seconds),
                 Instant.now()
             ));
     }

@@ -73,6 +73,52 @@ public class GroupMember {
     @Column(name = "left_at")
     private Instant leftAt;
 
+    @Column(name = "is_owner", nullable = false)
+    private boolean owner;
+
+    @Column(name = "requested_at")
+    private Instant requestedAt;
+
+    /** 그룹 생성자: 방장이며 즉시 ACTIVE. */
+    public static GroupMember createOwner(
+        FamilyGroup group,
+        User user,
+        MemberRole memberRole,
+        String familyNickname,
+        Instant joinedAt
+    ) {
+        GroupMember member = create(group, user, memberRole, familyNickname, null, joinedAt);
+        member.owner = true;
+        return member;
+    }
+
+    /** 코드 입장 요청: 방장 승인 전까지 PENDING. */
+    public static GroupMember createPending(
+        FamilyGroup group,
+        User user,
+        MemberRole memberRole,
+        String familyNickname,
+        Instant requestedAt
+    ) {
+        GroupMember member = create(group, user, memberRole, familyNickname, null, requestedAt);
+        member.status = MemberStatus.PENDING;
+        member.requestedAt = requestedAt;
+        return member;
+    }
+
+    /** 나갔던 멤버의 재요청: 같은 행을 이어 쓴다. */
+    public void requestAgain(String familyNickname, Instant requestedAt) {
+        this.status = MemberStatus.PENDING;
+        this.familyNickname = familyNickname;
+        this.requestedAt = requestedAt;
+        this.leftAt = null;
+    }
+
+    /** PENDING이 만료됐을 때 새 요청으로 갱신한다(닉네임 유지). */
+    public void renewRequest(Instant requestedAt) {
+        this.requestedAt = requestedAt;
+    }
+
     public static GroupMember create(
         FamilyGroup group,
         User user,
@@ -102,5 +148,26 @@ public class GroupMember {
     public void leave(Instant leftAt) {
         this.status = MemberStatus.LEFT;
         this.leftAt = leftAt;
+    }
+
+    /** 방장 승인: PENDING → ACTIVE. 가입 일시는 승인 시점이다(방장 위임 순서 기준). */
+    public void approve(Instant approvedAt) {
+        this.status = MemberStatus.ACTIVE;
+        this.joinedAt = approvedAt;
+    }
+
+    /** 거절은 LEFT로 돌려 보낸다. 거절된 사용자는 다시 요청할 수 있다. */
+    public void reject(Instant at) {
+        leave(at);
+    }
+
+    /** 강퇴: 코드로 재입장할 수 없다. */
+    public void remove(Instant removedAt) {
+        this.status = MemberStatus.REMOVED;
+        this.leftAt = removedAt;
+    }
+
+    public void changeOwner(boolean owner) {
+        this.owner = owner;
     }
 }
