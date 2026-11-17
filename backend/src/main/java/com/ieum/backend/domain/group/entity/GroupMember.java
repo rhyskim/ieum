@@ -1,0 +1,106 @@
+package com.ieum.backend.domain.group.entity;
+
+import com.ieum.backend.domain.common.enums.MemberRole;
+import com.ieum.backend.domain.common.enums.MemberStatus;
+import com.ieum.backend.domain.user.entity.User;
+import com.ieum.backend.global.common.TimeZoneConstants;
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
+import jakarta.persistence.FetchType;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
+import jakarta.persistence.Table;
+import jakarta.persistence.UniqueConstraint;
+import java.time.Instant;
+import java.time.LocalTime;
+import java.util.UUID;
+import lombok.AccessLevel;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+
+@Getter
+@Entity
+@Table(
+    name = "group_members",
+    uniqueConstraints = {
+        @UniqueConstraint(name = "uq_group_member", columnNames = {"group_id", "user_id"})
+    }
+)
+@NoArgsConstructor(access = AccessLevel.PROTECTED)
+public class GroupMember {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.UUID)
+    @Column(name = "id", nullable = false, updatable = false)
+    private UUID id;
+
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "group_id", nullable = false)
+    private FamilyGroup group;
+
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "user_id", nullable = false)
+    private User user;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "member_role", length = 20, nullable = false)
+    private MemberRole memberRole;
+
+    @Column(name = "family_nickname", length = 40, nullable = false)
+    private String familyNickname;
+
+    @Column(name = "target_call_phone", length = 30)
+    private String targetCallPhone;
+
+    @Column(name = "custom_notification_time", nullable = false)
+    private LocalTime customNotificationTime;
+
+    @Column(name = "notification_enabled", nullable = false)
+    private boolean notificationEnabled;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "status", length = 20, nullable = false)
+    private MemberStatus status;
+
+    @Column(name = "joined_at", nullable = false)
+    private Instant joinedAt;
+
+    @Column(name = "left_at")
+    private Instant leftAt;
+
+    public static GroupMember create(
+        FamilyGroup group,
+        User user,
+        MemberRole memberRole,
+        String familyNickname,
+        String targetCallPhone,
+        Instant joinedAt
+    ) {
+        GroupMember member = new GroupMember();
+        member.group = group;
+        member.user = user;
+        member.memberRole = memberRole;
+        member.familyNickname = familyNickname;
+        member.targetCallPhone = targetCallPhone;
+        member.customNotificationTime = TimeZoneConstants.DAILY_QUESTION_ASSIGN_TIME_KST;
+        member.notificationEnabled = true;
+        member.status = MemberStatus.ACTIVE;
+        member.joinedAt = joinedAt;
+        return member;
+    }
+
+    public void updateNotificationPreference(LocalTime customNotificationTime, boolean notificationEnabled) {
+        this.customNotificationTime = customNotificationTime;
+        this.notificationEnabled = notificationEnabled;
+    }
+
+    public void leave(Instant leftAt) {
+        this.status = MemberStatus.LEFT;
+        this.leftAt = leftAt;
+    }
+}

@@ -1,0 +1,24 @@
+spring:
+  jpa:
+    hibernate:
+      ddl-auto: validate
+  flyway:
+    enabled: true
+
+management:
+  health:
+    redis:
+      enabled: false
+
+aws:
+  s3:
+    endpoint: http://localhost:4566
+    public-endpoint: http://localhost:4566
+    region: ap-northeast-2
+    access-key: test
+    secret-key: test
+    bucket-name: ieum-voice-storage-test
+    ephemeral-prefix: audio/ephemeral-30d/
+    permanent-prefix: audio/permanent/
+    path-style-access-enabled: true
+    use-static-credentials: true
