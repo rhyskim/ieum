@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:ieum_mobile/features/auth/presentation/login_screen.dart';
+import 'package:ieum_mobile/features/auth/presentation/sessions_screen.dart';
 import 'package:ieum_mobile/features/bootstrap/presentation/phase0_bootstrap_screen.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
@@ -14,6 +16,14 @@ GoRouter appRouter(Ref ref) {
       GoRoute(
         path: '/',
         builder: (context, state) => const Phase0BootstrapScreen(),
+      ),
+      GoRoute(
+        path: '/login',
+        builder: (context, state) => const LoginScreen(),
+      ),
+      GoRoute(
+        path: '/sessions',
+        builder: (context, state) => const SessionsScreen(),
       ),
       GoRoute(
         path: '/invite',

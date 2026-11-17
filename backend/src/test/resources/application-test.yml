@@ -22,3 +22,10 @@ aws:
     permanent-prefix: audio/permanent/
     path-style-access-enabled: true
     use-static-credentials: true
+
+ieum:
+  auth:
+    jwt-secret: test-only-secret-0123456789-0123456789-0123456789
+    social:
+      kakao-app-id: test-kakao-app
+      apple-client-id: test.apple.client
