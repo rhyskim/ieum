@@ -4,6 +4,7 @@ import com.ieum.backend.global.security.CustomAccessDeniedHandler;
 import com.ieum.backend.global.security.CustomAuthenticationEntryPoint;
 import com.ieum.backend.global.security.JwtAuthenticationFilter;
 import com.ieum.backend.global.security.JwtProperties;
+import com.ieum.backend.global.security.PublicEndpoints;
 import lombok.RequiredArgsConstructor;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
@@ -37,19 +38,7 @@ public class SecurityConfig {
                 .accessDeniedHandler(customAccessDeniedHandler)
             )
             .authorizeHttpRequests(auth -> auth
-                .requestMatchers(
-                    "/api/v1/health",
-                    "/api/v1/policies",
-                    "/api/v1/auth/refresh",
-                    "/api/v1/auth/kakao",
-                    "/api/v1/auth/naver",
-                    "/api/v1/auth/apple",
-                    "/api/v1/auth/*/restore",
-                    "/actuator/health",
-                    "/v3/api-docs/**",
-                    "/swagger-ui/**",
-                    "/swagger-ui.html"
-                ).permitAll()
+                .requestMatchers(PublicEndpoints.PATTERNS).permitAll()
                 .anyRequest().authenticated()
             )
             .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);

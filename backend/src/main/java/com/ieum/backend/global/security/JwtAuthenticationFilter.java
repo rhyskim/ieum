@@ -29,14 +29,6 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     private final JwtProvider jwtProvider;
     private final ObjectMapper objectMapper;
 
-    /** 로그인·복구·갱신은 공개 엔드포인트다. 기기에 남은 만료 Access가 붙어 와도 막지 않는다. */
-    @Override
-    protected boolean shouldNotFilter(HttpServletRequest request) {
-        String path = request.getRequestURI();
-        return path.equals("/api/v1/auth/refresh")
-            || path.matches("/api/v1/auth/(kakao|naver|apple)(/restore)?");
-    }
-
     @Override
     protected void doFilterInternal(
         HttpServletRequest request,
@@ -54,8 +46,12 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 new UsernamePasswordAuthenticationToken(currentUser, null, Collections.emptyList())
             );
         } catch (ExpiredJwtException e) {
-            writeError(response, ErrorCode.TOKEN_EXPIRED);
-            return;
+            // 공개 경로는 기기에 남은 만료 Access가 붙어 와도 막지 않는다. 보호 경로만 TOKEN_EXPIRED로 갱신을 유도한다.
+            if (!PublicEndpoints.matches(request)) {
+                writeError(response, ErrorCode.TOKEN_EXPIRED);
+                return;
+            }
+            SecurityContextHolder.clearContext();
         } catch (JwtException | IllegalArgumentException e) {
             // 토큰 원문은 로그에 남기지 않는다. 인증 정보 없이 진행하면 EntryPoint가 401 UNAUTHORIZED를 응답한다.
             SecurityContextHolder.clearContext();

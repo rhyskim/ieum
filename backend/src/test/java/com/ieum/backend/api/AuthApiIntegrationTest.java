@@ -442,22 +442,40 @@ class AuthApiIntegrationTest {
 
     // ---------- 검수 반영 ----------
 
-    @Test
-    @DisplayName("만료된 Access 토큰이 헤더에 붙어 있어도 공개 로그인·갱신 엔드포인트는 막히지 않는다")
-    void expiredAccessTokenDoesNotBlockPublicAuthEndpoints() throws Exception {
-        String expired = Jwts.builder()
+    private String expiredAccessToken() {
+        return Jwts.builder()
             .subject(UUID.randomUUID().toString())
             .claim("tier", MembershipTier.FREE.name())
             .issuedAt(new Date(System.currentTimeMillis() - 3_600_000))
             .expiration(new Date(System.currentTimeMillis() - 1_800_000))
             .signWith(Keys.hmacShaKeyFor(jwtProperties.jwtSecret().getBytes(StandardCharsets.UTF_8)))
             .compact();
+    }
+
+    @Test
+    @DisplayName("만료된 Access 토큰이 헤더에 붙어 있어도 공개 로그인·갱신 엔드포인트는 막히지 않는다")
+    void expiredAccessTokenDoesNotBlockPublicAuthEndpoints() throws Exception {
         String token = stubKakao("k-" + UUID.randomUUID());
 
-        mockMvc.perform(post("/api/v1/auth/kakao").header("Authorization", "Bearer " + expired)
+        mockMvc.perform(post("/api/v1/auth/kakao").header("Authorization", "Bearer " + expiredAccessToken())
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"token\":\"" + token + "\"}"))
             .andExpect(status().isOk());
+    }
+
+    @Test
+    @DisplayName("공개 경로(health·policies·api-docs)는 만료 Bearer가 붙어도 200, 보호 경로는 TOKEN_EXPIRED 유지")
+    void publicPathsIgnoreExpiredBearerButProtectedPathsKeepTokenExpired() throws Exception {
+        String bearer = "Bearer " + expiredAccessToken();
+
+        mockMvc.perform(get("/api/v1/health").header("Authorization", bearer)).andExpect(status().isOk());
+        mockMvc.perform(get("/api/v1/policies").header("Authorization", bearer)).andExpect(status().isOk());
+        mockMvc.perform(get("/v3/api-docs").header("Authorization", bearer)).andExpect(status().isOk());
+
+        // 모바일 자동 갱신 흐름이 의존하므로 보호 경로는 반드시 TOKEN_EXPIRED여야 한다.
+        mockMvc.perform(get("/api/v1/auth/sessions").header("Authorization", bearer))
+            .andExpect(status().isUnauthorized())
+            .andExpect(jsonPath("$.code").value("TOKEN_EXPIRED"));
     }
 
     @Test
