@@ -14,7 +14,12 @@ Backend
 - `POST /api/v1/auth/logout`(현재 기기), `GET /api/v1/auth/sessions`(기기 목록), `DELETE /api/v1/auth/sessions/{id}`(원격 로그아웃).
 - JWT 인증 필터가 `CurrentUser(userId, membershipTier)`를 SecurityContext에 넣는다. 기존 `@GroupMemberOnly`가 동작해야 한다.
 - Flyway `V2`: `user_identities(user_id, provider, subject, email, UNIQUE(provider, subject))`, `refresh_tokens(id, user_id, family_id, token_hash, device_label, expires_at, used_at, revoked_at, last_used_at, created_at)`. 기존 `users`의 `oauth_*` 컬럼 이전 방식은 Root 승인 후 확정.
-- Apple: 첫 로그인의 이름·이메일을 저장한다.
+- Apple: 첫 로그인의 이름·이메일을 저장한다. Apple 토큰 해지(revoke)는 account 범위.
+- Refresh 동시 사용(ADR 결정 7): 사용 처리는 `UPDATE ... WHERE used_at IS NULL`. 이미 사용된 토큰이 사용 후 **10초 이내**(설정값)면 같은 family에 새 토큰을 추가 발급, 초과면 family 전체 폐기 + 401.
+- 탈퇴·복구(ADR 결정 8):
+  - `DELETE /api/v1/users/me`: `deleted_at` 설정 + 해당 사용자의 모든 Refresh 폐기.
+  - `deleted_at` 사용자가 로그인(30일 이내) → 토큰 발급 없이 403 `ACCOUNT_PENDING_DELETION` + `restorableUntil`(탈퇴일+30일).
+  - `POST /api/v1/auth/{provider}/restore`: 소셜 토큰을 다시 검증한 뒤 `deleted_at` 해제 + 토큰 발급. 유예가 지났으면 403 `ACCOUNT_RESTORE_EXPIRED`(파기 배치 구현 전까지의 임시 처리).
 - 오류 응답: 카카오·네이버·Apple 장애/타임아웃은 503, 위조·만료 토큰은 401 `INVALID_SOCIAL_TOKEN`, Access 만료는 401 `TOKEN_EXPIRED`. 토큰 원문을 로그에 남기지 않는다.
 - 동시 가입 요청은 DB 유니크 제약 위반을 잡아 재조회로 처리한다.
 
@@ -24,7 +29,7 @@ Mobile
 - 로그인 화면(카카오·네이버·Apple 버튼, 한글 라벨)과 기기 목록 화면. 접근성 규칙(루트 CLAUDE.md §5) 준수.
 
 ## 범위 밖
-프로필 온보딩 UI, 탈퇴·30일 복구, 계정 연결(`docs/tasks/account.md`), 위치(IP) 수집, FCM 토큰 연동.
+프로필 온보딩 UI, 30일 후 개인정보 파기 배치, 탈퇴 시 그룹 내 표시 방식, Apple 토큰 해지, 계정 연결(`docs/tasks/account.md`), 위치(IP) 수집, FCM 토큰 연동.
 
 ## 수용 기준 (테스트로 표현)
 - [ ] 유효한 소셜 토큰(제공자 호출은 stub)으로 신규 가입과 기존 로그인이 각각 성공하고 신규 여부가 구분된다.
@@ -34,6 +39,8 @@ Mobile
 - [ ] DB에는 Refresh 원문이 없고 해시만 있다.
 - [ ] 기기 A 로그아웃이 기기 B 세션에 영향을 주지 않는다. 다른 사용자의 세션은 조회·삭제할 수 없다.
 - [ ] JWT 없이 보호 API 호출 시 401, 유효 JWT면 `@GroupMemberOnly` 검사가 동작한다.
+- [ ] 같은 Refresh로 동시 2건 → 정확히 한 건만 사용 처리됨. 사용 후 10초 이내 재사용은 추가 발급, 10초 초과 재사용은 family 폐기.
+- [ ] 탈퇴 후 모든 Refresh가 무효. 유예 내 로그인은 403 `ACCOUNT_PENDING_DELETION`(토큰 없음), `restore`는 소셜 토큰 재검증 후 성공, 유예 초과는 403 `ACCOUNT_RESTORE_EXPIRED`.
 - [ ] 모바일: 동시 401 3건이 갱신 요청 1회만 만든다(테스트로 증명).
 
 ## 관련 ADR·문서
