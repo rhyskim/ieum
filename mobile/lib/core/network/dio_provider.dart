@@ -6,6 +6,7 @@ import 'package:ieum_mobile/core/auth/token_pair.dart';
 import 'package:ieum_mobile/core/config/app_env.dart';
 import 'package:ieum_mobile/core/network/auth_refresh_interceptor.dart';
 import 'package:ieum_mobile/core/network/auth_token_reader.dart';
+import 'package:ieum_mobile/core/network/safe_log_interceptor.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 part 'dio_provider.g.dart';
@@ -49,12 +50,7 @@ Dio dio(Ref ref) {
   );
 
   if (kDebugMode) {
-    dio.interceptors.add(
-      LogInterceptor(
-        requestBody: true,
-        responseBody: true,
-      ),
-    );
+    dio.interceptors.add(SafeLogInterceptor());
   }
 
   ref.onDispose(() {
