@@ -43,12 +43,14 @@ class GroupDetailScreen extends ConsumerWidget {
                   member: member,
                   onEdit: member.me ? null : () => _editAlias(context, ref, member),
                 ),
-              const SizedBox(height: 24),
-              LargeButton(
-                label: '관리자에게 문의하기',
-                outlined: true,
-                onPressed: () => context.push('/groups/$groupId/support'),
-              ),
+              if (group.iAmOwner) ...<Widget>[
+                const SizedBox(height: 24),
+                LargeButton(
+                  label: '관리자에게 문의하기',
+                  outlined: true,
+                  onPressed: () => context.push('/groups/$groupId/support'),
+                ),
+              ],
             ],
           ),
           loading: () => const Center(child: CircularProgressIndicator()),

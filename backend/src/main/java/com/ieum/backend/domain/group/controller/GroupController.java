@@ -136,6 +136,7 @@ public class GroupController {
         @PathVariable UUID groupId,
         @Valid @RequestBody SupportRequestBody request
     ) {
+        groupService.requireOwner(groupId, user.userId());
         supportService.submit(groupId, user.userId(), request.message());
         return ApiResponse.ok(null);
     }

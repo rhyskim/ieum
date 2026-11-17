@@ -286,6 +286,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('입장 코드 보기'), findsNothing);
+    expect(find.text('관리자에게 문의하기'), findsNothing);
   });
 
   testWidgets('상한 도달 문의: 내용이 없으면 안내하고, 보내면 접수 문구가 보인다', (tester) async {

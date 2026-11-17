@@ -467,11 +467,24 @@ class GroupApiIntegrationTest {
     // ---------- 수용 기준: 관리자 문의 ----------
 
     @Test
-    @DisplayName("멤버의 문의는 DB에 저장되고, 멤버가 아니면 거부된다")
+    @DisplayName("방장의 문의는 DB에 저장되고, 일반 멤버·비멤버는 403이다")
     void supportRequestIsStored() throws Exception {
         UUID owner = newUser("방장");
         UUID outsider = newUser("외부인");
+        UUID member = newUser("일반멤버");
         UUID groupId = createGroup(owner, "가족", "방장");
+        join(member, issueCode(owner, groupId), "멤버");
+        jdbc.update("update group_members set status = 'ACTIVE' where group_id = ? and user_id = ?", groupId, member);
+
+        mockMvc.perform(post("/api/v1/groups/" + groupId + "/support-requests")
+                .header("Authorization", bearer(member))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"message\":\"일반 멤버 문의\"}"))
+            .andExpect(status().isForbidden())
+            .andExpect(jsonPath("$.code").value("NOT_GROUP_OWNER"));
+        Integer rows = jdbc.queryForObject(
+            "select count(*) from support_requests where group_id = ?", Integer.class, groupId);
+        assertThat(rows).isZero();
 
         mockMvc.perform(post("/api/v1/groups/" + groupId + "/support-requests")
                 .header("Authorization", bearer(owner))
