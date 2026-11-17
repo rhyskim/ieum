@@ -3,7 +3,6 @@ package com.ieum.backend.domain.user.entity;
 import com.ieum.backend.domain.common.enums.FontScaleMode;
 import com.ieum.backend.domain.common.enums.MemberRole;
 import com.ieum.backend.domain.common.enums.MembershipTier;
-import com.ieum.backend.domain.common.enums.OAuthProvider;
 import com.ieum.backend.global.common.BaseTimeEntity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -13,7 +12,6 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
-import jakarta.persistence.UniqueConstraint;
 import java.time.Instant;
 import java.util.UUID;
 import lombok.AccessLevel;
@@ -22,12 +20,7 @@ import lombok.NoArgsConstructor;
 
 @Getter
 @Entity
-@Table(
-    name = "users",
-    uniqueConstraints = {
-        @UniqueConstraint(name = "uq_users_oauth", columnNames = {"oauth_provider", "oauth_subject"})
-    }
-)
+@Table(name = "users")
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class User extends BaseTimeEntity {
 
@@ -35,13 +28,6 @@ public class User extends BaseTimeEntity {
     @GeneratedValue(strategy = GenerationType.UUID)
     @Column(name = "id", nullable = false, updatable = false)
     private UUID id;
-
-    @Enumerated(EnumType.STRING)
-    @Column(name = "oauth_provider", length = 20, nullable = false)
-    private OAuthProvider oauthProvider;
-
-    @Column(name = "oauth_subject", length = 128, nullable = false)
-    private String oauthSubject;
 
     @Column(name = "email", length = 255)
     private String email;
@@ -77,15 +63,11 @@ public class User extends BaseTimeEntity {
     private Instant deletedAt;
 
     public static User create(
-        OAuthProvider oauthProvider,
-        String oauthSubject,
         String email,
         String name,
         MemberRole defaultRole
     ) {
         User user = new User();
-        user.oauthProvider = oauthProvider;
-        user.oauthSubject = oauthSubject;
         user.email = email;
         user.name = name;
         user.defaultRole = defaultRole != null ? defaultRole : MemberRole.CHILD;
@@ -94,6 +76,14 @@ public class User extends BaseTimeEntity {
         user.voiceConsentAgreed = false;
         user.membershipTier = MembershipTier.FREE;
         return user;
+    }
+
+    public void markDeleted(Instant deletedAt) {
+        this.deletedAt = deletedAt;
+    }
+
+    public void restore() {
+        this.deletedAt = null;
     }
 
     public void agreeVoiceConsent(Instant agreedAt) {

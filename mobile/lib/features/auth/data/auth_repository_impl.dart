@@ -1,0 +1,109 @@
+import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:ieum_mobile/core/auth/auth_token_store.dart';
+import 'package:ieum_mobile/core/auth/token_pair.dart';
+import 'package:ieum_mobile/core/network/api_exception.dart';
+import 'package:ieum_mobile/core/network/dio_provider.dart';
+import 'package:ieum_mobile/features/auth/domain/auth_models.dart';
+import 'package:ieum_mobile/features/auth/domain/auth_repository.dart';
+import 'package:riverpod_annotation/riverpod_annotation.dart';
+
+part 'auth_repository_impl.g.dart';
+
+class AuthRepositoryImpl implements AuthRepository {
+  const AuthRepositoryImpl(this._dio, this._store);
+
+  final Dio _dio;
+  final AuthTokenStore _store;
+
+  @override
+  Future<bool> login(SocialProvider provider, String socialToken, {String? deviceLabel}) async {
+    final Map<String, dynamic> data = await _send(
+      () => _dio.post<Map<String, dynamic>>(
+        '/api/v1/auth/${provider.pathSegment}',
+        data: <String, dynamic>{
+          'token': socialToken,
+          'deviceLabel': deviceLabel ?? _defaultDeviceLabel(),
+        },
+      ),
+    ) as Map<String, dynamic>;
+    await _store.save(
+      TokenPair(
+        accessToken: data['accessToken'] as String,
+        refreshToken: data['refreshToken'] as String,
+      ),
+    );
+    return data['newUser'] as bool;
+  }
+
+  @override
+  Future<void> logout() async {
+    try {
+      final String? refreshToken = await _store.readRefreshToken();
+      if (refreshToken != null) {
+        await _send(
+          () => _dio.post<Map<String, dynamic>>(
+            '/api/v1/auth/logout',
+            data: <String, String>{'refreshToken': refreshToken},
+          ),
+        );
+      }
+    } on ApiException {
+      // 네트워크가 끊겼어도 이 기기에서는 로그아웃돼야 한다. 서버 세션은 만료로 정리된다.
+    } finally {
+      await _store.clear();
+    }
+  }
+
+  @override
+  Future<List<DeviceSession>> fetchSessions() async {
+    final Object? data = await _send(
+      () => _dio.get<Map<String, dynamic>>('/api/v1/auth/sessions'),
+    );
+    return (data! as List<dynamic>)
+        .map((dynamic e) => DeviceSession.fromJson(e as Map<String, dynamic>))
+        .toList();
+  }
+
+  @override
+  Future<void> revokeSession(String sessionId) async {
+    await _send(() => _dio.delete<Map<String, dynamic>>('/api/v1/auth/sessions/$sessionId'));
+  }
+
+  /// 공통 응답 봉투(`ApiResponse`)에서 data를 꺼낸다. data가 없는 응답(로그아웃 등)은 null.
+  Future<Object?> _send(Future<Response<Map<String, dynamic>>> Function() request) async {
+    try {
+      final Response<Map<String, dynamic>> response = await request();
+      return response.data?['data'];
+    } on DioException catch (e) {
+      throw ApiException.fromDioException(e);
+    }
+  }
+
+  String _defaultDeviceLabel() => switch (defaultTargetPlatform) {
+        TargetPlatform.iOS => 'iOS 기기',
+        TargetPlatform.android => 'Android 기기',
+        _ => '알 수 없는 기기',
+      };
+}
+
+/// 소셜 SDK 연동 전 기본 구현. 실제 키(.env)가 없으므로 연동은 별도 작업으로 남긴다.
+class UnconfiguredSocialTokenSource implements SocialTokenSource {
+  const UnconfiguredSocialTokenSource();
+
+  @override
+  Future<String> obtainToken(SocialProvider provider) {
+    throw const ApiException(
+      code: 'SOCIAL_SDK_NOT_CONFIGURED',
+      message: '소셜 로그인 설정이 아직 연결되지 않았습니다.',
+    );
+  }
+}
+
+@riverpod
+AuthRepository authRepository(Ref ref) =>
+    AuthRepositoryImpl(ref.watch(dioProvider), ref.watch(authTokenStoreProvider));
+
+@riverpod
+SocialTokenSource socialTokenSource(Ref ref) => const UnconfiguredSocialTokenSource();
