@@ -26,7 +26,7 @@ flowchart TB
         API["Backend API Server\n(Java 21 + Spring Boot 3.3)"]
         Scheduler["Spring Scheduler + ShedLock\n(19:00 질문 / 15:00 리마인드 / 17:00 공개 / 10:00 만료)"]
         DB[("PostgreSQL 16\n(RDS)")]
-        Redis[("Redis 7\n(JWT Refresh Token & 초대코드 Rate Limit)")]
+        Redis[("Redis 7\n(초대코드 Rate Limit 등. Refresh Token은 PostgreSQL, ADR-0001)")]
         S3[("AWS S3 Bucket\n(30일 Lifecycle + Presigned URL)")]
     end
 
