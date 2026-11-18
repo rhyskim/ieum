@@ -1,5 +1,6 @@
 package com.ieum.backend.domain.group.service;
 
+import com.ieum.backend.domain.answer.service.RevealReevaluator;
 import com.ieum.backend.domain.common.enums.GroupStatus;
 import com.ieum.backend.domain.common.enums.MemberStatus;
 import com.ieum.backend.domain.group.config.GroupProperties;
@@ -33,6 +34,7 @@ public class GroupMembershipService {
     private final GroupInviteRepository inviteRepository;
     private final GroupProperties properties;
     private final GroupNotifier notifier;
+    private final RevealReevaluator revealReevaluator;
 
     /** 만료되지 않은 승인 대기 요청(오래된 순). */
     @Transactional(readOnly = true)
@@ -87,6 +89,8 @@ public class GroupMembershipService {
             throw new BusinessException(ErrorCode.INVALID_INPUT);
         }
         target.remove(Instant.now());
+        // 미답변자가 빠져 "전원 답변"이 성립할 수 있다(ADR-0007 결정 8). 락 순서: group(위에서 잡음) → daily_questions.
+        revealReevaluator.reevaluateGroup(groupId);
     }
 
     /**
@@ -103,6 +107,7 @@ public class GroupMembershipService {
 
         if (!me.isOwner()) {
             me.leave(now);
+            revealReevaluator.reevaluateGroup(groupId); // 락 순서: group(위에서 잡음) → daily_questions
             return;
         }
 
@@ -124,6 +129,7 @@ public class GroupMembershipService {
         me.leave(now);
         memberRepository.saveAndFlush(me);
         successor.changeOwner(true);
+        revealReevaluator.reevaluateGroup(groupId); // 방장이 미답변자였다면 전원 답변이 성립할 수 있다
     }
 
     /**
@@ -149,6 +155,24 @@ public class GroupMembershipService {
             me.changeOwner(false);
             memberRepository.saveAndFlush(me);
             candidates.get(0).changeOwner(true);
+        }
+    }
+
+    /**
+     * 탈퇴 요청 후 내 ACTIVE 그룹들의 LOCKED 질문을 재평가한다(ADR-0007 결정 8). 호출자(AccountService.withdraw)가
+     * users 행 FOR UPDATE와 deleted_at flush, {@link #delegateOwnershipsOnWithdrawal}을 마친 뒤 마지막에 부른다.
+     * <p>
+     * <b>여기서 family_groups 락을 새로 잡지 않는다(의도적).</b> 위임 단계가 "내가 방장인 그룹"만 id 오름차순으로 이미
+     * 잠갔는데, 여기서 내 모든 그룹을 잠그면 큰 id의 방장 그룹을 잡은 뒤 작은 id의 일반 그룹을 잡게 되어
+     * 전역 락 순서(users → family_groups(id 오름차순) → daily_questions)가 깨지고, 같은 그룹을 오름차순으로 잠그는
+     * 다른 withdraw/leave와 교착이 난다. daily_questions 행만 id 오름차순으로 잠가도 되는 이유: 저장(group S → dq X)과
+     * leave/remove(group X → dq X)는 우리가 쥔 users·group 락을 기다리지 않으므로 대기 사이클이 생기지 않는다.
+     * 나중에 누가 여기에 group 락을 추가하면 이 보장이 사라진다.
+     */
+    @Transactional(propagation = Propagation.MANDATORY)
+    public void reevaluateRevealsOnWithdrawal(UUID userId) {
+        for (UUID groupId : memberRepository.findMyActiveGroupIds(userId)) {
+            revealReevaluator.reevaluateGroup(groupId);
         }
     }
 

@@ -9,6 +9,7 @@ import org.springframework.http.HttpStatus;
 public enum ErrorCode {
 
     INVALID_INPUT(HttpStatus.BAD_REQUEST, "요청 입력값이 올바르지 않습니다."),
+    ANSWER_TOO_SHORT(HttpStatus.BAD_REQUEST, "답변은 공백을 뺀 30자 이상 써 주세요."),
     VOICE_DURATION_EXCEEDED(HttpStatus.BAD_REQUEST, "녹음 제한 시간을 초과했습니다."),
     VOICE_FILE_SIZE_EXCEEDED(HttpStatus.BAD_REQUEST, "음성 파일 최대 용량을 초과했습니다."),
     UNAUTHORIZED(HttpStatus.UNAUTHORIZED, "인증이 필요합니다."),

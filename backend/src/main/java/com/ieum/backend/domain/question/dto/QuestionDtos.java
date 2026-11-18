@@ -10,7 +10,7 @@ public final class QuestionDtos {
 
     private QuestionDtos() {}
 
-    /** answer 작업 전이라 hasAnswered는 항상 false다. */
+    /** hasAnswered는 요청한 본인의 답변 여부다. */
     public record TodayQuestionResponse(
         UUID dailyQuestionId,
         UUID groupId,

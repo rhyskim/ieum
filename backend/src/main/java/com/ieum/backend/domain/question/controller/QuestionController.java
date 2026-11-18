@@ -3,7 +3,9 @@ package com.ieum.backend.domain.question.controller;
 import com.ieum.backend.domain.question.dto.QuestionDtos.TodayQuestionResponse;
 import com.ieum.backend.domain.question.service.QuestionQueryService;
 import com.ieum.backend.global.common.ApiResponse;
+import com.ieum.backend.global.security.CurrentUser;
 import com.ieum.backend.global.security.GroupMemberOnly;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -20,7 +22,10 @@ public class QuestionController {
 
     @GetMapping("/today")
     @GroupMemberOnly
-    public ApiResponse<TodayQuestionResponse> today(@PathVariable UUID groupId) {
-        return ApiResponse.ok(queryService.today(groupId));
+    public ApiResponse<TodayQuestionResponse> today(
+        @AuthenticationPrincipal CurrentUser user,
+        @PathVariable UUID groupId
+    ) {
+        return ApiResponse.ok(queryService.today(groupId, user.userId()));
     }
 }
