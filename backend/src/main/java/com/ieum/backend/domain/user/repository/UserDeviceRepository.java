@@ -1,16 +1,13 @@
 package com.ieum.backend.domain.user.repository;
 
 import com.ieum.backend.domain.user.entity.UserDevice;
-<<<<<<< HEAD
 import java.time.Instant;
 import java.util.List;
-=======
->>>>>>> d585710 (feat(backend/account): 탈퇴 요청 개편·유효 멤버 단일 정의·복구 조건부 UPDATE (V4))
 import java.util.UUID;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
-<<<<<<< HEAD
+import org.springframework.data.repository.query.Param;
 
 public interface UserDeviceRepository extends JpaRepository<UserDevice, UUID> {
 
@@ -39,14 +36,9 @@ public interface UserDeviceRepository extends JpaRepository<UserDevice, UUID> {
 
     @Query("select d.fcmToken from UserDevice d where d.user.id = :userId")
     List<String> findTokensByUserId(UUID userId);
-=======
-import org.springframework.data.repository.query.Param;
-
-public interface UserDeviceRepository extends JpaRepository<UserDevice, UUID> {
 
     /** 탈퇴 요청: 푸시 대상에서 즉시 빠지도록 기기 토큰(FCM)을 모두 삭제한다. 없어도 성공(멱등). */
     @Modifying(flushAutomatically = true, clearAutomatically = true)
     @Query("delete from UserDevice d where d.user.id = :userId")
     int deleteAllByUserId(@Param("userId") UUID userId);
->>>>>>> d585710 (feat(backend/account): 탈퇴 요청 개편·유효 멤버 단일 정의·복구 조건부 UPDATE (V4))
 }
