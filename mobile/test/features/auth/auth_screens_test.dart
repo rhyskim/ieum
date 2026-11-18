@@ -11,6 +11,7 @@ import 'package:ieum_mobile/features/auth/presentation/login_screen.dart';
 import 'package:ieum_mobile/features/auth/presentation/restore_screen.dart';
 import 'package:ieum_mobile/features/auth/presentation/withdraw_screen.dart';
 import 'package:ieum_mobile/features/auth/presentation/sessions_screen.dart';
+import 'package:ieum_mobile/features/notification/application/push_registrar.dart';
 
 class _FakeRepository implements AuthRepository {
   final List<String> loggedIn = <String>[];
@@ -19,6 +20,7 @@ class _FakeRepository implements AuthRepository {
   final List<String> restored = <String>[];
   final List<ContentChoice> withdrawn = <ContentChoice>[];
   ApiException? withdrawError;
+  ApiException? restoreError;
   final List<String> linked = <String>[];
   final List<String> unlinked = <String>[];
   ApiException? loginError;
@@ -38,6 +40,7 @@ class _FakeRepository implements AuthRepository {
 
   @override
   Future<void> restore(SocialProvider provider, String socialToken, {String? deviceLabel}) async {
+    if (restoreError != null) throw restoreError!;
     restored.add('${provider.pathSegment}:$socialToken');
   }
 
@@ -83,11 +86,38 @@ class _FakeTokenSource implements SocialTokenSource {
   Future<String> obtainToken(SocialProvider provider) async => 'social-${provider.name}';
 }
 
-Widget _app(_FakeRepository repo, Widget home) {
+/// 푸시 토큰 등록 호출만 세는 대역. 실제 Firebase 없이 registerIfGranted 호출 여부를 검증한다.
+class _SpyPushRegistrar implements PushRegistrar {
+  _SpyPushRegistrar({this.granted = true});
+
+  final bool granted;
+  int registerIfGrantedCalls = 0;
+
+  @override
+  Future<bool> registerIfGranted() async {
+    registerIfGrantedCalls++;
+    return granted;
+  }
+
+  @override
+  Future<bool> enable() async => false;
+
+  @override
+  Future<void> registerCurrentToken() async {}
+
+  @override
+  Future<void> register(String token) async {}
+}
+
+Widget _app(_FakeRepository repo, Widget home, {_SpyPushRegistrar? registrar}) {
   final GoRouter router = GoRouter(
     routes: <RouteBase>[
       GoRoute(path: '/', builder: (context, state) => home),
       GoRoute(path: '/login', builder: (context, state) => const Text('로그인 화면으로 이동')),
+      GoRoute(
+        path: '/notifications/intro',
+        builder: (context, state) => const Text('알림 안내 화면'),
+      ),
       GoRoute(
         path: '/restore',
         builder: (context, state) {
@@ -101,6 +131,7 @@ Widget _app(_FakeRepository repo, Widget home) {
     overrides: [
       authRepositoryProvider.overrideWithValue(repo),
       socialTokenSourceProvider.overrideWithValue(_FakeTokenSource()),
+      if (registrar != null) pushRegistrarProvider.overrideWithValue(registrar),
     ],
     child: MaterialApp.router(routerConfig: router),
   );
@@ -186,6 +217,66 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(repo.restored, <String>['kakao:social-kakao']);
+  });
+
+  testWidgets('복구 성공 시 push 토큰을 다시 등록하려고 registerIfGranted를 호출하고, 허용 상태면 안내 화면 없이 끝난다', (tester) async {
+    // 탈퇴할 때 서버가 기기 토큰을 지우므로 복구 뒤에 다시 등록해야 푸시를 받는다.
+    final _FakeRepository repo = _FakeRepository();
+    final _SpyPushRegistrar registrar = _SpyPushRegistrar();
+    await tester.pumpWidget(
+      _app(
+        repo,
+        RestoreScreen(provider: SocialProvider.kakao, restorableUntil: DateTime.utc(2026, 12, 17, 3)),
+        registrar: registrar,
+      ),
+    );
+
+    await tester.tap(find.text('계정 복구하기'));
+    await tester.pumpAndSettle();
+
+    expect(repo.restored, <String>['kakao:social-kakao']);
+    expect(registrar.registerIfGrantedCalls, 1);
+    expect(find.text('알림 안내 화면'), findsNothing);
+  });
+
+  testWidgets('복구 성공 후 알림 권한이 아직 허용 전이면 알림 사전 안내 화면으로 이동한다', (tester) async {
+    final _SpyPushRegistrar registrar = _SpyPushRegistrar(granted: false);
+    await tester.pumpWidget(
+      _app(
+        _FakeRepository(),
+        RestoreScreen(provider: SocialProvider.kakao, restorableUntil: DateTime.utc(2026, 12, 17, 3)),
+        registrar: registrar,
+      ),
+    );
+
+    await tester.tap(find.text('계정 복구하기'));
+    await tester.pumpAndSettle();
+
+    expect(registrar.registerIfGrantedCalls, 1);
+    expect(find.text('알림 안내 화면'), findsOneWidget);
+  });
+
+  testWidgets('복구가 실패하면 push 토큰 등록을 하지 않고 안내 문구를 보여 준다', (tester) async {
+    final _FakeRepository repo = _FakeRepository()
+      ..restoreError = const ApiException(
+        code: 'ACCOUNT_RESTORE_EXPIRED',
+        message: '복구 가능 기간이 지난 계정입니다.',
+        statusCode: 403,
+      );
+    final _SpyPushRegistrar registrar = _SpyPushRegistrar();
+    await tester.pumpWidget(
+      _app(
+        repo,
+        RestoreScreen(provider: SocialProvider.kakao, restorableUntil: DateTime.utc(2026, 12, 17, 3)),
+        registrar: registrar,
+      ),
+    );
+
+    await tester.tap(find.text('계정 복구하기'));
+    await tester.pumpAndSettle();
+
+    expect(registrar.registerIfGrantedCalls, 0);
+    expect(find.text('복구 가능 기간이 지난 계정입니다.'), findsOneWidget);
   });
 
   testWidgets('로그인 수단 화면: 연결된 수단은 해제, 없는 수단은 연결 버튼이 보이고 56dp 이상이다', (tester) async {
