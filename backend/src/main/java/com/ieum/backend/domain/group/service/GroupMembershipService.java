@@ -176,21 +176,27 @@ public class GroupMembershipService {
     }
 
     /**
-     * 파기 시점에 혼자 남은 그룹을 해산한다(ADR-0002 결정 8). 내 ACTIVE 그룹을 id 오름차순으로 잠그고(복구·탈퇴와 같은 락 순서),
-     * 그룹이 ACTIVE이면서 본인을 뺀 유효 ACTIVE 멤버가 한 명도 없을 때만 {@link #dissolve}한다. 호출 시점에 본인은 이미
-     * deleted_at이 있어 유효 멤버로 세어지지 않는다. 다른 유효 멤버가 있는 그룹, 이미 해산된 그룹은 건드리지 않는다.
+     * 파기 시점에 혼자 남은 그룹을 해산한다(ADR-0002 결정 8). 내 ACTIVE 그룹을 id 오름차순으로 잠그고,
+     * 그룹이 ACTIVE이면서 본인을 뺀 ACTIVE 멤버 중 아직 파기되지 않은 사람이 한 명도 없을 때만 {@link #dissolve}한다.
+     * "유효 멤버"가 아니라 "파기되지 않은 멤버"로 세는 이유: 복구할 수 있는 탈퇴 유예 중 멤버(예: 아직 유예 중인 방장)가
+     * 남아 있는 그룹을, 먼저 31일이 지난 다른 사람의 파기 때문에 미리 해산하면 안 되기 때문이다.
+     * 해산할 때는 이미 파기된 방장 등 남은 ACTIVE 행도 LEFT·방장 해제로 함께 정리한다. 이미 해산된 그룹은 건드리지 않는다.
      */
     @Transactional(propagation = Propagation.MANDATORY)
     public void dissolveGroupsLeftEmptyByPurge(UUID userId) {
         Instant now = Instant.now();
         for (UUID groupId : memberRepository.findMyActiveGroupIds(userId)) {
             FamilyGroup group = lockGroup(groupId);
-            if (group.getStatus() != GroupStatus.ACTIVE || memberRepository.countValidActive(groupId) > 0) {
+            if (group.getStatus() != GroupStatus.ACTIVE
+                || memberRepository.countActiveNotPurgedExcept(groupId, userId) > 0) {
                 continue;
             }
             memberRepository.findByGroup_IdAndUser_Id(groupId, userId)
                 .filter(m -> m.getStatus() == MemberStatus.ACTIVE)
-                .ifPresent(me -> dissolve(groupId, me, now));
+                .ifPresent(me -> {
+                    dissolve(groupId, me, now);
+                    memberRepository.leaveAllActive(groupId, now);
+                });
         }
     }
 

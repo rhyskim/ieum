@@ -57,6 +57,7 @@ public class AppleRevocationService {
                 case SKIPPED -> skipped++;
                 case RETRY -> retry++;
                 case FAILED -> failed++;
+                case STALE -> { }
             }
         }
         Summary summary = new Summary(claimed.size(), done, skipped, retry, failed);
@@ -92,8 +93,14 @@ public class AppleRevocationService {
             return recordFailure(row, e);
         }
         String status = result == AppleTokenRevoker.Result.DONE ? "DONE" : "SKIPPED";
-        jdbc.update("update apple_revocations set status = ?, updated_at = now() where id = ? and status = 'PENDING'",
-            status, row.id());
+        // attempts가 집을 때와 같을 때만 반영한다: 임대가 만료돼 다른 실행이 먼저 처리했다면 0행이고 STALE이다.
+        int updated = jdbc.update(
+            "update apple_revocations set status = ?, updated_at = now() "
+                + "where id = ? and status = 'PENDING' and attempts = ?",
+            status, row.id(), row.attempts());
+        if (updated == 0) {
+            return Outcome.STALE;
+        }
         return result == AppleTokenRevoker.Result.DONE ? Outcome.DONE : Outcome.SKIPPED;
     }
 
@@ -104,28 +111,33 @@ public class AppleRevocationService {
         if (error.length() > ERROR_MAX) {
             error = error.substring(0, ERROR_MAX);
         }
+        // 집을 때의 attempts와 같을 때만 반영한다: 임대가 만료돼 다른 실행이 먼저 처리했다면 횟수를 되감지 않고 STALE로 끝낸다.
         if (attempts >= properties.appleMaxAttempts()) {
-            jdbc.update(
+            int updated = jdbc.update(
                 "update apple_revocations set status = 'FAILED', attempts = ?, last_error = ?, updated_at = now() "
-                    + "where id = ? and status = 'PENDING'",
-                attempts, error, row.id());
+                    + "where id = ? and status = 'PENDING' and attempts = ?",
+                attempts, error, row.id(), row.attempts());
+            if (updated == 0) {
+                return Outcome.STALE;
+            }
             log.warn("apple-revocation 최대 재시도 도달, FAILED 처리 attempts={}", attempts);
             return Outcome.FAILED;
         }
         Duration delay = AppleRevocationBackoff.delay(
             attempts, properties.appleBaseDelay(), properties.appleMaxDelay(), properties.appleJitter(), random);
-        jdbc.update(
+        int updated = jdbc.update(
             "update apple_revocations set attempts = ?, last_error = ?, "
                 + "next_attempt_at = now() + make_interval(secs => ?), updated_at = now() "
-                + "where id = ? and status = 'PENDING'",
-            attempts, error, delay.toMillis() / 1000.0, row.id());
-        return Outcome.RETRY;
+                + "where id = ? and status = 'PENDING' and attempts = ?",
+            attempts, error, delay.toMillis() / 1000.0, row.id(), row.attempts());
+        return updated == 0 ? Outcome.STALE : Outcome.RETRY;
     }
 
     private record Claimed(UUID id, UUID userId, int attempts) {
     }
 
-    private enum Outcome { DONE, SKIPPED, RETRY, FAILED }
+    /** STALE: 임대가 만료돼 다른 실행이 먼저 이 행의 결과를 반영한 경우. 집계하지 않는다. */
+    private enum Outcome { DONE, SKIPPED, RETRY, FAILED, STALE }
 
     public record Summary(int claimed, int done, int skipped, int retry, int failed) {
     }

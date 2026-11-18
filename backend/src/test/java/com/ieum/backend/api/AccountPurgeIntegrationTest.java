@@ -18,6 +18,7 @@ import com.ieum.backend.domain.account.apple.AppleTokenRevoker;
 import com.ieum.backend.domain.account.purge.AccountPurgeService;
 import com.ieum.backend.domain.account.purge.AccountPurgeService.Outcome;
 import com.ieum.backend.domain.account.storage.AudioObjectStorage;
+import com.ieum.backend.domain.auth.service.AccountService;
 import com.ieum.backend.domain.auth.social.AppleTokenVerifier;
 import com.ieum.backend.domain.auth.social.KakaoTokenVerifier;
 import com.ieum.backend.domain.auth.social.NaverTokenVerifier;
@@ -35,6 +36,7 @@ import java.util.concurrent.CyclicBarrier;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -77,6 +79,8 @@ class AccountPurgeIntegrationTest {
     private AccountPurgeService purgeService;
     @Autowired
     private AppleRevocationService appleService;
+    @Autowired
+    private AccountService accountService;
     @PersistenceContext
     private EntityManager em;
 
@@ -90,6 +94,12 @@ class AccountPurgeIntegrationTest {
     private NaverTokenVerifier naver;
     @MockBean
     private AppleTokenVerifier appleVerifier;
+
+    @BeforeEach
+    void cleanAppleQueue() {
+        // 테스트끼리 남긴 해지 큐 행이 다른 테스트의 runDue 집계에 섞이지 않게 한다.
+        jdbc.update("delete from apple_revocations");
+    }
 
     // ---------- helpers ----------
 
@@ -471,6 +481,55 @@ class AccountPurgeIntegrationTest {
             .isEqualTo("ACTIVE"); // 유효 멤버 규칙으로 숨겨질 뿐 행은 유지
     }
 
+    @Test
+    @DisplayName("복구할 수 있는 유예 중 방장이 남은 그룹은, 먼저 31일이 지난 멤버가 파기돼도 해산되지 않고 방장이 복구하면 그대로 돌아온다(Agy 검수 반영)")
+    void groupWithGraceOwnerIsNotDissolvedByAnotherMembersPurge() {
+        UUID graceOwner = withdrawnUser(10, "KEEP");     // 방장이지만 탈퇴 10일째(복구 가능)
+        UUID groupId = newGroup(graceOwner);
+        UUID purgedMember = withdrawnUser(32, "KEEP");
+        addMember(groupId, purgedMember, "ACTIVE", false);
+
+        assertThat(purgeService.purgeOne(purgedMember)).isEqualTo(Outcome.PURGED);
+
+        assertThat(jdbc.queryForObject("select status from family_groups where id = ?", String.class, groupId))
+            .isEqualTo("ACTIVE");
+        assertThat(jdbc.queryForObject(
+            "select status from group_members where group_id = ? and user_id = ?", String.class, groupId, graceOwner))
+            .isEqualTo("ACTIVE");
+        assertThat(jdbc.queryForObject(
+            "select is_owner from group_members where group_id = ? and user_id = ?", Boolean.class, groupId, graceOwner))
+            .isTrue();
+
+        accountService.restore(graceOwner);
+
+        assertThat(purged(graceOwner)).isFalse();
+        assertThat(jdbc.queryForObject(
+            "select status from group_members where group_id = ? and user_id = ?", String.class, groupId, graceOwner))
+            .isEqualTo("ACTIVE");
+        assertThat(jdbc.queryForObject("select status from family_groups where id = ?", String.class, groupId))
+            .isEqualTo("ACTIVE");
+    }
+
+    @Test
+    @DisplayName("마지막 미파기 멤버가 파기될 때 그룹이 해산되고, 먼저 파기된 방장의 ACTIVE 행까지 LEFT·방장 해제로 정리된다(Agy 검수 반영)")
+    void lastPurgeDissolvesGroupAndCleansEveryActiveRow() {
+        UUID owner = withdrawnUser(40, "KEEP");
+        UUID groupId = newGroup(owner);
+        UUID member = withdrawnUser(32, "KEEP");
+        addMember(groupId, member, "ACTIVE", false);
+
+        assertThat(purgeService.purgeOne(owner)).isEqualTo(Outcome.PURGED); // 멤버가 아직 파기 전이라 해산하지 않는다
+        assertThat(jdbc.queryForObject("select status from family_groups where id = ?", String.class, groupId))
+            .isEqualTo("ACTIVE");
+
+        assertThat(purgeService.purgeOne(member)).isEqualTo(Outcome.PURGED);  // 마지막 미파기 멤버
+
+        assertThat(jdbc.queryForObject("select status from family_groups where id = ?", String.class, groupId))
+            .isEqualTo("ARCHIVED");
+        assertThat(count("select count(*) from group_members where group_id = ? and (status = 'ACTIVE' or is_owner)",
+            groupId)).isZero();
+    }
+
     // ---------- 수용 기준: Apple 해지 큐 ----------
 
     @Test
@@ -489,8 +548,38 @@ class AccountPurgeIntegrationTest {
         assertThat(count("select count(*) from apple_revocations where user_id = ? and status = 'PENDING'", appleUser))
             .isEqualTo(1);
         assertThat(count("select count(*) from apple_revocations where user_id = ?", kakaoOnly)).isZero();
-        // 같은 사용자를 다시 파기 시도해도(이중 INSERT) 큐 행은 1개다.
+    }
+
+    @Test
+    @DisplayName("이미 해지 큐 행이 있는 사용자를 파기해도 유니크 충돌 없이 끝나고 큐 행은 1개다(ON CONFLICT DO NOTHING)")
+    void existingQueueRowDoesNotBreakPurge() {
+        UUID appleUser = withdrawnUser(32, "KEEP");
+        jdbc.update("insert into user_identities (user_id, provider, subject) values (?, 'APPLE', ?)",
+            appleUser, "a-" + UUID.randomUUID());
+        jdbc.update("insert into apple_revocations (user_id, attempts) values (?, 2)", appleUser);
+
+        assertThat(purgeService.purgeOne(appleUser)).isEqualTo(Outcome.PURGED);
+
         assertThat(count("select count(*) from apple_revocations where user_id = ?", appleUser)).isEqualTo(1);
+        assertThat(count("select attempts from apple_revocations where user_id = ?", appleUser)).isEqualTo(2); // 덮어쓰지 않는다
+    }
+
+    @Test
+    @DisplayName("임대가 만료돼 다른 실행이 먼저 처리한 행은 늦게 끝난 실행이 횟수를 되감지 않고 집계하지 않는다(Agy 검수 반영)")
+    void staleApplyDoesNotRewindAttempts() {
+        UUID user = newUser("지연");
+        jdbc.update("insert into apple_revocations (user_id) values (?)", user);
+        when(revoker.revoke(any())).thenAnswer(inv -> {
+            // 호출이 지연되는 사이 다른 실행이 이 행을 먼저 처리해 attempts를 5로 올렸다고 가정한다.
+            jdbc.update("update apple_revocations set attempts = 5 where user_id = ?", user);
+            throw new IllegalStateException("apple down");
+        });
+
+        AppleRevocationService.Summary summary = appleService.runDue();
+
+        assertThat(count("select attempts from apple_revocations where user_id = ?", user)).isEqualTo(5);
+        assertThat(summary.retry()).isZero();
+        assertThat(summary.failed()).isZero();
     }
 
     @Test

@@ -1,11 +1,13 @@
 package com.ieum.backend.domain.group.repository;
 
 import com.ieum.backend.domain.group.entity.GroupMember;
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -81,4 +83,18 @@ public interface GroupMemberRepository extends JpaRepository<GroupMember, UUID> 
     @Query("select m.group.id from GroupMember m where m.user.id = :userId and " + ACTIVE
         + " order by m.group.id asc")
     List<UUID> findMyActiveGroupIds(@Param("userId") UUID userId);
+
+    /**
+     * 파기 전용(유효 멤버 규칙의 의도적 예외): 본인을 뺀 ACTIVE 멤버 중 아직 파기되지 않은 사람 수. 복구할 수 있는
+     * 탈퇴 유예 중 멤버까지 센다. 유예 중인 멤버가 남아 있는 그룹을 먼저 파기되는 사람 때문에 해산하지 않기 위해서다.
+     */
+    @Query("select count(m) from GroupMember m join m.user u "
+        + "where m.group.id = :groupId and u.id <> :userId and " + ACTIVE + " and u.purgedAt is null")
+    long countActiveNotPurgedExcept(@Param("groupId") UUID groupId, @Param("userId") UUID userId);
+
+    /** 파기 전용: 해산하는 그룹에 남은 모든 ACTIVE 행(이미 파기된 방장 포함)을 LEFT·방장 해제로 정리한다. */
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
+    @Query("update GroupMember m set m.status = com.ieum.backend.domain.common.enums.MemberStatus.LEFT, "
+        + "m.owner = false, m.leftAt = :now where m.group.id = :groupId and " + ACTIVE)
+    int leaveAllActive(@Param("groupId") UUID groupId, @Param("now") Instant now);
 }

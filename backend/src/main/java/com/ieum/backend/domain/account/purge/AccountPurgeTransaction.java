@@ -30,9 +30,15 @@ public class AccountPurgeTransaction {
     @PersistenceContext
     private EntityManager em;
 
+    /**
+     * @return 이 호출이 users 행을 PURGED로 만들었으면 true. 임대 만료 경계에서 다른 실행이 먼저 끝냈으면 false
+     *     (앞의 문장은 멱등이라 그대로 두어도 안전하며, 호출자는 이중 집계하지 않도록 건너뜀으로 센다).
+     */
     @Transactional
-    public void finalizeUser(UUID userId, boolean deleteContent) {
-        // 1) 혼자 남은 그룹 해산(JPA). 그룹을 id 오름차순으로 잠그고, users 행은 마지막에 갱신한다(복구·탈퇴와 같은 락 순서).
+    public boolean finalizeUser(UUID userId, boolean deleteContent) {
+        // 1) 혼자 남은 그룹 해산(JPA). 그룹을 id 오름차순으로 잠근 뒤 users 행은 마지막에 갱신한다. 이 순서는 탈퇴·복구
+        //    (users 행 → 그룹)와 반대지만, 파기 대상(31일 경과, purge_started_at 있음)은 복구 UPDATE가 행에 닿지 못하고
+        //    탈퇴 요청은 이미 탈퇴한 계정에서 아무것도 하지 않으므로 같은 사용자를 두고 교착이 생기지 않는다.
         //    JPA가 읽은 group_members가 뒤의 JDBC 익명화를 덮어쓰지 않도록 변경을 반영하고 영속성 컨텍스트를 비운다.
         membershipService.dissolveGroupsLeftEmptyByPurge(userId);
         em.flush();
@@ -63,10 +69,10 @@ public class AccountPurgeTransaction {
         jdbc.update("update group_members set family_nickname = ?, target_call_phone = null where user_id = ?",
             ANONYMOUS_NAME, userId);
 
-        // 7) 마지막: users 익명화와 완료 표시. 이미 다른 실행이 끝냈으면 0행이고, 앞의 문장은 멱등이라 그대로 둬도 안전하다.
-        jdbc.update(
+        // 7) 마지막: users 익명화와 완료 표시. 이미 다른 실행이 끝냈으면 0행이다.
+        return jdbc.update(
             "update users set name = ?, email = null, phone_number = null, purged_at = now(), updated_at = now() "
                 + "where id = ? and purged_at is null and deleted_at is not null",
-            ANONYMOUS_NAME, userId);
+            ANONYMOUS_NAME, userId) == 1;
     }
 }

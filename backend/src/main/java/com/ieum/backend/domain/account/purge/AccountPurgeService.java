@@ -68,8 +68,8 @@ public class AccountPurgeService {
             if (deleteContent) {
                 deleteAnswerAudio(userId);
             }
-            purgeTransaction.finalizeUser(userId, deleteContent);
-            return Outcome.PURGED;
+            // 임대 만료 경계에서 다른 실행이 먼저 끝냈다면 이 실행은 건너뜀으로 센다(이중 집계 방지).
+            return purgeTransaction.finalizeUser(userId, deleteContent) ? Outcome.PURGED : Outcome.SKIPPED;
         } catch (RuntimeException e) {
             // 예외 종류만 남긴다(이름·이메일 등 개인정보를 로그에 쓰지 않는다). 다음 실행이 처음부터 다시 한다.
             log.warn("account-purge 실패 userId={} reason={}", userId, e.getClass().getSimpleName());
