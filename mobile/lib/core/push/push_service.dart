@@ -3,6 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 /// FCM 접근을 감싼 포트. Firebase 설정이 없는 환경에서는 [NoopPushService]가 쓰인다.
 abstract interface class PushService {
+  /// 권한 팝업 없이 현재 OS 알림 권한이 허용 상태인지 조회한다.
+  Future<bool> isPermissionGranted();
+
   /// 알림 권한을 요청한다. 허용되면 true.
   Future<bool> requestPermission();
 
@@ -19,6 +22,9 @@ abstract interface class PushService {
 
 class NoopPushService implements PushService {
   const NoopPushService();
+
+  @override
+  Future<bool> isPermissionGranted() async => false;
 
   @override
   Future<bool> requestPermission() async => false;
@@ -43,11 +49,15 @@ class FirebasePushService implements PushService {
   final FirebaseMessaging _messaging;
 
   @override
-  Future<bool> requestPermission() async {
-    final NotificationSettings settings = await _messaging.requestPermission();
-    return settings.authorizationStatus == AuthorizationStatus.authorized ||
-        settings.authorizationStatus == AuthorizationStatus.provisional;
-  }
+  Future<bool> isPermissionGranted() async =>
+      _isGranted(await _messaging.getNotificationSettings());
+
+  @override
+  Future<bool> requestPermission() async => _isGranted(await _messaging.requestPermission());
+
+  bool _isGranted(NotificationSettings settings) =>
+      settings.authorizationStatus == AuthorizationStatus.authorized ||
+      settings.authorizationStatus == AuthorizationStatus.provisional;
 
   @override
   Future<String?> getToken() => _messaging.getToken();

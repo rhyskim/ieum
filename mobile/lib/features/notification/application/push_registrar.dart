@@ -27,6 +27,19 @@ class PushRegistrar {
     }
   }
 
+  /// 로그인 직후용: OS 알림 권한이 이미 허용 상태일 때만 권한 팝업 없이 조용히 토큰을 등록한다.
+  /// 같은 기기에서 계정이 바뀌어도 새 계정으로 소유가 이전된다. 허용 전이면 아무것도 하지 않고 false.
+  Future<bool> registerIfGranted() async {
+    try {
+      if (!await _push.isPermissionGranted()) return false;
+      await registerCurrentToken();
+      return true;
+    } on Object catch (e) {
+      debugPrint('푸시 자동 등록 실패: ${e.runtimeType}');
+      return false;
+    }
+  }
+
   Future<void> registerCurrentToken() async {
     final String? token = await _push.getToken();
     if (token != null) await register(token);

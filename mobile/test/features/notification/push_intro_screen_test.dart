@@ -19,6 +19,9 @@ class _FakePushService implements PushService {
   final StreamController<String> refresh = StreamController<String>.broadcast();
 
   @override
+  Future<bool> isPermissionGranted() async => granted;
+
+  @override
   Future<bool> requestPermission() async {
     permissionRequests++;
     return granted;
