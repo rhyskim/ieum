@@ -8,6 +8,7 @@ public record GroupPushEvent(Type type, UUID groupId, UUID recipientUserId) {
     public enum Type {
         JOIN_REQUESTED,
         JOIN_APPROVED,
-        JOIN_REJECTED
+        JOIN_REJECTED,
+        QUESTION_ASSIGNED
     }
 }

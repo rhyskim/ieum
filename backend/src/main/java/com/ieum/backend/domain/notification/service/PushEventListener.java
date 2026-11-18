@@ -89,6 +89,7 @@ public class PushEventListener {
             case JOIN_REQUESTED -> new PushMessage("이음", "가족 방에 새 입장 요청이 있어요", data);
             case JOIN_APPROVED -> new PushMessage("이음", "가족 방 입장 요청이 승인되었어요", data);
             case JOIN_REJECTED -> new PushMessage("이음", "가족 방 입장 요청 결과가 도착했어요", data);
+            case QUESTION_ASSIGNED -> new PushMessage("이음", "새 질문이 도착했어요", data);
         };
     }
 }

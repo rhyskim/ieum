@@ -24,6 +24,8 @@ aws:
     use-static-credentials: true
 
 ieum:
+  question:
+    scheduling-enabled: false
   account:
     scheduling-enabled: false
   auth:
