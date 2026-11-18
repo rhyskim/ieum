@@ -15,6 +15,8 @@ import 'package:ieum_mobile/features/group/presentation/join_screen.dart';
 import 'package:ieum_mobile/features/group/presentation/pending_requests_screen.dart';
 import 'package:ieum_mobile/features/group/presentation/support_screen.dart';
 import 'package:ieum_mobile/features/notification/presentation/push_intro_screen.dart';
+import 'package:ieum_mobile/features/question/presentation/answer_compose_screen.dart';
+import 'package:ieum_mobile/features/question/presentation/today_question_screen.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 part 'app_router.g.dart';
@@ -86,6 +88,21 @@ GoRouter appRouter(Ref ref) {
                 path: 'support',
                 builder: (context, state) =>
                     SupportScreen(groupId: state.pathParameters['groupId']!),
+              ),
+              GoRoute(
+                path: 'question',
+                builder: (context, state) =>
+                    TodayQuestionScreen(groupId: state.pathParameters['groupId']!),
+                routes: [
+                  GoRoute(
+                    path: ':dailyQuestionId/answer',
+                    builder: (context, state) => AnswerComposeScreen(
+                      groupId: state.pathParameters['groupId']!,
+                      dailyQuestionId: state.pathParameters['dailyQuestionId']!,
+                      initialText: state.extra as String?,
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
