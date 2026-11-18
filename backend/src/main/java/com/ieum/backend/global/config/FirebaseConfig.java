@@ -17,6 +17,9 @@ import org.springframework.context.annotation.Configuration;
 @ConditionalOnProperty(prefix = "firebase", name = "enabled", havingValue = "true")
 public class FirebaseConfig {
 
+    private static final int CONNECT_TIMEOUT_MS = 3_000;
+    private static final int READ_TIMEOUT_MS = 5_000;
+
     @Value("${firebase.credentials-path:}")
     private String credentialsPath;
 
@@ -31,6 +34,9 @@ public class FirebaseConfig {
         try (InputStream serviceAccount = new FileInputStream(credentialsPath)) {
             FirebaseOptions options = FirebaseOptions.builder()
                 .setCredentials(GoogleCredentials.fromStream(serviceAccount))
+                // FCM이 멈춰도 푸시 스레드가 무한정 기다리지 않도록 호출 구간에 타임아웃을 둔다(ADR-0004).
+                .setConnectTimeout(CONNECT_TIMEOUT_MS)
+                .setReadTimeout(READ_TIMEOUT_MS)
                 .build();
             FirebaseApp.initializeApp(options);
             log.info("FirebaseApp initialized successfully.");
