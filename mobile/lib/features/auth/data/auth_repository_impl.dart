@@ -3,9 +3,11 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:ieum_mobile/core/auth/auth_token_store.dart';
 import 'package:ieum_mobile/core/auth/token_pair.dart';
+import 'package:ieum_mobile/core/config/social_keys.dart';
 import 'package:ieum_mobile/core/network/api_exception.dart';
 import 'package:ieum_mobile/core/network/dio_provider.dart';
 import 'package:ieum_mobile/core/push/push_service.dart';
+import 'package:ieum_mobile/features/auth/data/sdk_social_token_source.dart';
 import 'package:ieum_mobile/features/auth/domain/auth_models.dart';
 import 'package:ieum_mobile/features/auth/domain/auth_repository.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
@@ -171,4 +173,5 @@ AuthRepository authRepository(Ref ref) => AuthRepositoryImpl(
     );
 
 @riverpod
-SocialTokenSource socialTokenSource(Ref ref) => const UnconfiguredSocialTokenSource();
+SocialTokenSource socialTokenSource(Ref ref) =>
+    SdkSocialTokenSource(const SocialKeys.fromEnvironment());

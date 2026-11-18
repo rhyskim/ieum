@@ -90,3 +90,6 @@ mobile/ios/ServiceDefinitions.json
 # ==========================================
 .worktrees/*
 !.worktrees/CLAUDE.md
+
+# 로컬 소셜 로그인 키(--dart-define-from-file). 커밋 금지
+mobile/dart_defines.local.json
