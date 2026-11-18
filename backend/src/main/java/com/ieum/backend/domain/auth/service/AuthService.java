@@ -11,6 +11,7 @@ import com.ieum.backend.domain.auth.social.SocialProfile;
 import com.ieum.backend.domain.auth.social.SocialTokenVerifier;
 import com.ieum.backend.domain.common.enums.OAuthProvider;
 import com.ieum.backend.domain.user.entity.User;
+import com.ieum.backend.domain.user.repository.UserDeviceRepository;
 import com.ieum.backend.domain.user.repository.UserRepository;
 import com.ieum.backend.global.exception.BusinessException;
 import com.ieum.backend.global.exception.ErrorCode;
@@ -48,6 +49,7 @@ public class AuthService {
     private final UserRegistrar userRegistrar;
     private final JwtProvider jwtProvider;
     private final JwtProperties jwtProperties;
+    private final UserDeviceRepository deviceRepository;
     private final Clock clock = Clock.systemUTC();
 
     public AuthService(
@@ -57,7 +59,8 @@ public class AuthService {
         UserRepository userRepository,
         UserRegistrar userRegistrar,
         JwtProvider jwtProvider,
-        JwtProperties jwtProperties
+        JwtProperties jwtProperties,
+        UserDeviceRepository deviceRepository
     ) {
         this.verifiers = socialTokenVerifiers;
         this.identityRepository = identityRepository;
@@ -66,6 +69,7 @@ public class AuthService {
         this.userRegistrar = userRegistrar;
         this.jwtProvider = jwtProvider;
         this.jwtProperties = jwtProperties;
+        this.deviceRepository = deviceRepository;
     }
 
     /** 소셜 로그인. 클래스 레벨 트랜잭션을 두지 않는다: 가입 충돌 시 재조회가 새 트랜잭션에서 이뤄져야 한다. */
@@ -184,9 +188,12 @@ public class AuthService {
             .toList();
     }
 
-    /** 현재 기기 로그아웃. 이미 없거나 남의 토큰이면 아무 일도 하지 않는다(멱등). */
+    /** 현재 기기 로그아웃. 이미 없거나 남의 토큰이면 아무 일도 하지 않는다(멱등). fcmToken이 있으면 본인의 해당 기기 푸시 토큰도 해제한다. */
     @Transactional
-    public void logout(UUID userId, String refreshToken) {
+    public void logout(UUID userId, String refreshToken, String fcmToken) {
+        if (fcmToken != null && !fcmToken.isBlank()) {
+            deviceRepository.deleteByUserIdAndFcmToken(userId, fcmToken);
+        }
         refreshTokenRepository.findByTokenHash(hash(refreshToken))
             .filter(t -> t.getUserId().equals(userId))
             .ifPresent(t -> refreshTokenRepository.revokeFamily(userId, t.getFamilyId(), Instant.now(clock)));
