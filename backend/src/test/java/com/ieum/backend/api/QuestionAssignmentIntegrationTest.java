@@ -42,6 +42,9 @@ import java.util.concurrent.Future;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.springframework.boot.test.system.CapturedOutput;
+import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
@@ -66,6 +69,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 @AutoConfigureMockMvc
 @Testcontainers
 @ActiveProfiles("test")
+@ExtendWith(OutputCaptureExtension.class)
 class QuestionAssignmentIntegrationTest {
 
     private static final ZoneId KST = ZoneId.of("Asia/Seoul");
@@ -282,7 +286,7 @@ class QuestionAssignmentIntegrationTest {
 
     @Test
     @DisplayName("질문 은행이 비면 그 그룹만 건너뛰고 다른 그룹에는 영향이 없다")
-    void exhaustedBankSkipsOnlyThatGroup() throws Exception {
+    void exhaustedBankSkipsOnlyThatGroup(CapturedOutput output) throws Exception {
         jdbc.update("delete from questions where sequence_order > 2");
         Family old = newFamily();
         at(DAY1, 19, 0);
@@ -297,6 +301,33 @@ class QuestionAssignmentIntegrationTest {
         assertThat(created).isEqualTo(1);
         assertThat(rows(old.groupId())).isEqualTo(2);
         assertThat(servedOrders(fresh.groupId())).containsExactly(1);
+        assertThat(output.getAll()).contains("질문 은행이 소진되어 배정을 건너뜁니다").contains("남은 질문이");
+        verify(sender, timeout(3000).times(1)).send(eq(fresh.token()), any());
+        settle();
+        verify(sender, times(2)).send(eq(old.token()), any()); // 1·2일차 배정 푸시뿐, 3일차(소진)에는 없다
+    }
+
+    @Test
+    @DisplayName("푸시는 유효 멤버 모두에게 가고 탈퇴 유예 멤버에게는 가지 않는다")
+    void pushGoesToValidMembersOnly() throws Exception {
+        Family f = newFamily();
+        UUID sibling = newUser("형");
+        String siblingToken = addDevice(sibling);
+        UUID withdrawn = newUser("누나");
+        String withdrawnToken = addDevice(withdrawn);
+        for (UUID u : List.of(sibling, withdrawn)) {
+            jdbc.update("insert into group_members (group_id, user_id, member_role, family_nickname, status) "
+                + "values (?, ?, 'CHILD', '가족', 'ACTIVE')", f.groupId(), u);
+        }
+        jdbc.update("update users set deleted_at = now() where id = ?", withdrawn);
+        at(DAY1, 19, 0);
+
+        assignment.assignCurrentCycle();
+
+        verify(sender, timeout(3000).times(1)).send(eq(f.token()), any());
+        verify(sender, timeout(3000).times(1)).send(eq(siblingToken), any());
+        settle();
+        verify(sender, never()).send(eq(withdrawnToken), any());
     }
 
     @Test
