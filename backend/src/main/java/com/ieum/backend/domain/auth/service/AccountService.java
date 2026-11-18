@@ -49,6 +49,8 @@ public class AccountService {
         membershipService.delegateOwnershipsOnWithdrawal(userId);
         deviceRepository.deleteAllByUserId(userId);
         refreshTokenRepository.revokeAllByUser(userId, now);
+        // 탈퇴로 분모가 줄어 "전원 답변"이 성립할 수 있다(ADR-0007 결정 8). 락 순서의 마지막 단계라 맨 끝에 둔다.
+        membershipService.reevaluateRevealsOnWithdrawal(userId);
     }
 
     /**

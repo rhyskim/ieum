@@ -1,6 +1,8 @@
 package com.ieum.backend.domain.question.repository;
 
+import com.ieum.backend.domain.common.enums.RevealStatus;
 import com.ieum.backend.domain.question.entity.DailyQuestion;
+import jakarta.persistence.LockModeType;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
@@ -8,6 +10,7 @@ import java.util.Optional;
 import java.util.UUID;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -53,4 +56,38 @@ public interface DailyQuestionRepository extends JpaRepository<DailyQuestion, UU
 
     @EntityGraph(attributePaths = "question")
     Optional<DailyQuestion> findByGroup_IdAndCycleDate(UUID groupId, LocalDate cycleDate);
+
+    @EntityGraph(attributePaths = "question")
+    Optional<DailyQuestion> findByIdAndGroup_Id(UUID id, UUID groupId);
+
+    /**
+     * 답변 저장·멤버 변동 재평가가 같은 질문에 대해 줄을 서는 행 잠금(ADR-0007 결정 1·9).
+     * 락 순서 users → family_groups(id 오름차순) → daily_questions(id 오름차순)의 마지막 단계다.
+     */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select d from DailyQuestion d where d.id = :id and d.group.id = :groupId")
+    Optional<DailyQuestion> findByIdAndGroupIdForUpdate(@Param("id") UUID id, @Param("groupId") UUID groupId);
+
+    @Query("select d.revealStatus from DailyQuestion d where d.id = :id")
+    Optional<RevealStatus> findRevealStatus(@Param("id") UUID id);
+
+    /** 재평가 대상: 그룹의 LOCKED 질문 id(오름차순 = 락 순서). 마감이 없어 지난 질문도 포함한다. */
+    @Query("select d.id from DailyQuestion d where d.group.id = :groupId "
+        + "and d.revealStatus = com.ieum.backend.domain.common.enums.RevealStatus.LOCKED order by d.id")
+    List<UUID> findLockedIdsByGroup(@Param("groupId") UUID groupId);
+
+    /** 전원 답변 공개 전환. 1이면 내가 전환시킨 것이다(알림은 이때만). */
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
+    @Query("update DailyQuestion d set d.revealStatus = com.ieum.backend.domain.common.enums.RevealStatus.REVEALED_ALL, "
+        + "d.revealedAt = :now where d.id = :id "
+        + "and d.revealStatus = com.ieum.backend.domain.common.enums.RevealStatus.LOCKED")
+    int revealAllIfLocked(@Param("id") UUID id, @Param("now") Instant now);
+
+    /** 시간 초과 공개 전환: 17시가 지났고 답변이 1건 이상일 때만. 0명이면 LOCKED 유지(질문 건너뜀). */
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
+    @Query("update DailyQuestion d set d.revealStatus = com.ieum.backend.domain.common.enums.RevealStatus.REVEALED_TIMEOUT, "
+        + "d.revealedAt = :now where d.id = :id "
+        + "and d.revealStatus = com.ieum.backend.domain.common.enums.RevealStatus.LOCKED "
+        + "and d.autoRevealAt <= :now and exists (select 1 from Answer a where a.dailyQuestion.id = d.id)")
+    int revealTimeoutIfDue(@Param("id") UUID id, @Param("now") Instant now);
 }

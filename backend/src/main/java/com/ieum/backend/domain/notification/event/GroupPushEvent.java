@@ -9,6 +9,7 @@ public record GroupPushEvent(Type type, UUID groupId, UUID recipientUserId) {
         JOIN_REQUESTED,
         JOIN_APPROVED,
         JOIN_REJECTED,
-        QUESTION_ASSIGNED
+        QUESTION_ASSIGNED,
+        ALL_ANSWERED
     }
 }
