@@ -92,6 +92,15 @@ public interface GroupMemberRepository extends JpaRepository<GroupMember, UUID> 
         + "where m.group.id = :groupId and u.id <> :userId and " + ACTIVE + " and u.purgedAt is null")
     long countActiveNotPurgedExcept(@Param("groupId") UUID groupId, @Param("userId") UUID userId);
 
+    /**
+     * 복구 전용(ADR-0002 결정 16): 이미 파기된(users.purged_at) 사용자의 방장 표시를 해제한다. 유효 방장이 없는 그룹에서
+     * 복구자를 방장으로 올리기 전에, 부분 유니크 인덱스(그룹당 ACTIVE 방장 1명)를 비우기 위해 쓴다. 해제한 행 수를 돌려준다.
+     */
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
+    @Query("update GroupMember m set m.owner = false where m.group.id = :groupId and m.owner = true "
+        + "and m.user.id in (select u.id from User u where u.purgedAt is not null)")
+    int releasePurgedOwners(@Param("groupId") UUID groupId);
+
     /** 파기 전용: 해산하는 그룹에 남은 모든 ACTIVE 행(이미 파기된 방장 포함)을 LEFT·방장 해제로 정리한다. */
     @Modifying(flushAutomatically = true, clearAutomatically = true)
     @Query("update GroupMember m set m.status = com.ieum.backend.domain.common.enums.MemberStatus.LEFT, "

@@ -552,6 +552,65 @@ class AccountPurgeIntegrationTest {
     }
 
     @Test
+    @DisplayName("방장 행이 이미 파기된 그룹으로 멤버가 복구하면 복구자가 방장이 되고 방장 플래그는 정확히 1명이다: M 탈퇴 → O 탈퇴 → O 파기 → M 복구(ADR 결정 16)")
+    void restorerBecomesOwnerWhenOwnerRowWasPurged() {
+        UUID owner = newUser("방장O");
+        UUID groupId = newGroup(owner);
+        UUID member = addValidMember(groupId);
+        accountService.withdraw(member, ContentChoice.KEEP);
+        accountService.withdraw(owner, ContentChoice.KEEP);
+        assertThat(isOwnerOf(groupId, owner)).isTrue(); // 유효 후보가 없어 방장 행이 그대로다(PR 1 규칙)
+        jdbc.update("update users set deleted_at = now() - interval '35 days' where id = ?", owner);
+        jdbc.update("update users set deleted_at = now() - interval '10 days' where id = ?", member);
+
+        assertThat(purgeService.purgeOne(owner)).isEqualTo(Outcome.PURGED);
+
+        // 파기 시점에는 M이 유예 중이라 위임도 해산도 하지 않고, 파기된 방장 행이 남는다.
+        assertThat(jdbc.queryForObject("select status from family_groups where id = ?", String.class, groupId))
+            .isEqualTo("ACTIVE");
+        assertThat(isOwnerOf(groupId, owner)).isTrue();
+
+        accountService.restore(member);
+
+        assertThat(isOwnerOf(groupId, member)).isTrue();
+        assertThat(isOwnerOf(groupId, owner)).isFalse();
+        assertThat(count("select count(*) from group_members where group_id = ? and is_owner and status = 'ACTIVE'",
+            groupId)).isEqualTo(1);
+        assertThat(jdbc.queryForObject(
+            "select status from group_members where group_id = ? and user_id = ?", String.class, groupId, member))
+            .isEqualTo("ACTIVE");
+        assertThat(jdbc.queryForObject("select status from family_groups where id = ?", String.class, groupId))
+            .isEqualTo("ACTIVE");
+    }
+
+    @Test
+    @DisplayName("방장이 단지 탈퇴 유예 중이면 복구자는 방장이 되지 않고, 그 방장이 이후 파기되면 결정 15로 유효 멤버에게 위임된다")
+    void graceOwnerKeepsOwnershipUntilPurgedThenDelegates() {
+        UUID owner = newUser("방장O");
+        UUID groupId = newGroup(owner);
+        UUID member = addValidMember(groupId);
+        accountService.withdraw(member, ContentChoice.KEEP);
+        accountService.withdraw(owner, ContentChoice.KEEP);
+
+        accountService.restore(member);
+
+        // 방장은 유예 중(복구 가능)이므로 복귀 권리를 존중한다: 복구자는 방장이 되지 않는다.
+        assertThat(isOwnerOf(groupId, owner)).isTrue();
+        assertThat(isOwnerOf(groupId, member)).isFalse();
+        assertThat(count("select count(*) from group_members where group_id = ? and is_owner and status = 'ACTIVE'",
+            groupId)).isEqualTo(1);
+
+        // 방장이 복귀하지 않고 파기되면 유효 멤버(M)에게 위임된다.
+        jdbc.update("update users set deleted_at = now() - interval '35 days' where id = ?", owner);
+        assertThat(purgeService.purgeOne(owner)).isEqualTo(Outcome.PURGED);
+
+        assertThat(isOwnerOf(groupId, member)).isTrue();
+        assertThat(isOwnerOf(groupId, owner)).isFalse();
+        assertThat(count("select count(*) from group_members where group_id = ? and is_owner and status = 'ACTIVE'",
+            groupId)).isEqualTo(1);
+    }
+
+    @Test
     @DisplayName("방장이 파기될 때 유효 멤버가 없고 파기되지 않은 멤버도 없으면 기존 해산 규칙대로 그룹이 해산된다")
     void purgedOwnerWithNoValidMemberDissolvesGroup() {
         UUID owner = withdrawnUser(35, "KEEP");

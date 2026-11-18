@@ -157,22 +157,47 @@ public class GroupMembershipService {
      * 내 ACTIVE 그룹을 id 오름차순으로 잠그고(승인과 같은 그룹 행 잠금), 본인을 포함한 유효 ACTIVE 수가
      * 상한을 넘으면 그 그룹의 내 멤버십을 LEFT로 바꾼다(다시 입장 요청 필요). 나머지 그룹은 그대로 복구된다.
      * 유예 중에 해산(ARCHIVED)된 그룹(유효 멤버가 방장뿐일 때 방장이 나간 경우)으로도 돌아가지 않는다.
+     * 복귀하는 그룹에 유효 방장이 없고 방장 행이 이미 파기됐다면 복구자가 방장이 된다(ADR-0002 결정 16, {@link #promoteIfOwnerPurged}).
      */
     @Transactional(propagation = Propagation.MANDATORY)
     public void reconcileOnRestore(UUID userId) {
         Instant now = Instant.now();
         for (UUID groupId : memberRepository.findMyActiveGroupIds(userId)) {
             FamilyGroup group = lockGroup(groupId);
-            memberRepository.findByGroup_IdAndUser_Id(groupId, userId)
+            GroupMember me = memberRepository.findByGroup_IdAndUser_Id(groupId, userId)
                 .filter(m -> m.getStatus() == MemberStatus.ACTIVE)
-                .ifPresent(me -> {
-                    if (group.getStatus() != GroupStatus.ACTIVE
-                        || memberRepository.countValidActive(groupId) > properties.memberLimit()) {
-                        me.changeOwner(false);
-                        me.leave(now);
-                    }
-                });
+                .orElse(null);
+            if (me == null) {
+                continue;
+            }
+            if (group.getStatus() != GroupStatus.ACTIVE
+                || memberRepository.countValidActive(groupId) > properties.memberLimit()) {
+                me.changeOwner(false);
+                me.leave(now);
+                continue;
+            }
+            promoteIfOwnerPurged(groupId, userId);
         }
+    }
+
+    /**
+     * 복구한 사용자가 돌아온 그룹에 유효 방장이 없고, 비어 있는 방장 자리가 "파기된 방장 행"이라면 복구자가 방장이 된다
+     * (ADR-0002 결정 16). 방장이 파기된 시점에 유효 멤버가 없어 위임되지 못한 그룹이 방장 없이 남는 것을 막는다.
+     * 방장이 단지 탈퇴 유예 중(복구 가능)인 경우는 대상이 아니다: 그 사람의 복귀 권리를 존중하고, 그가 복귀하지 않고
+     * 파기되면 결정 15의 위임(유효 멤버가 있으면 가장 오래된 유효 멤버)으로 이어지기 때문이다.
+     * 부분 유니크 인덱스(그룹당 ACTIVE 방장 1명) 때문에 기존(파기된) 방장 해제 → flush → 승격 순서로 처리한다.
+     */
+    private void promoteIfOwnerPurged(UUID groupId, UUID userId) {
+        if (memberRepository.findValidActiveOwner(groupId).isPresent()) {
+            return;
+        }
+        // 벌크 UPDATE가 영속성 컨텍스트를 비우므로(flush 후 clear) 승격할 멤버십은 그 뒤에 새로 읽는다.
+        if (memberRepository.releasePurgedOwners(groupId) == 0) {
+            return;
+        }
+        memberRepository.findByGroup_IdAndUser_Id(groupId, userId)
+            .filter(m -> m.getStatus() == MemberStatus.ACTIVE)
+            .ifPresent(m -> m.changeOwner(true));
     }
 
     /**
