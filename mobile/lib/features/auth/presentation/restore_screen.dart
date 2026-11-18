@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:ieum_mobile/core/network/api_exception.dart';
+import 'package:ieum_mobile/features/auth/application/social_auth_flow.dart';
 import 'package:ieum_mobile/features/auth/data/auth_repository_impl.dart';
 import 'package:ieum_mobile/features/auth/domain/auth_models.dart';
 import 'package:ieum_mobile/features/notification/application/push_registrar.dart';
@@ -35,15 +36,18 @@ class _RestoreScreenState extends ConsumerState<RestoreScreen> {
       _errorMessage = null;
     });
     try {
-      final String socialToken =
-          await ref.read(socialTokenSourceProvider).obtainToken(widget.provider);
-      await ref.read(authRepositoryProvider).restore(widget.provider, socialToken);
+      final bool done = await runWithSocialToken(
+        ref.read(socialTokenSourceProvider),
+        widget.provider,
+        (String token) => ref.read(authRepositoryProvider).restore(widget.provider, token),
+      );
+      if (!done) return; // 사용자가 취소함
       // 탈퇴할 때 서버가 기기 토큰을 지웠으므로, 일반 로그인처럼 허용 상태면 조용히 다시 등록하고
       // 허용 전이면 사전 안내 화면으로 보낸다.
       final bool registered = await ref.read(pushRegistrarProvider).registerIfGranted();
       if (mounted) context.go(registered ? '/' : '/notifications/intro');
     } on ApiException catch (e) {
-      if (mounted) setState(() => _errorMessage = e.message);
+      if (mounted) setState(() => _errorMessage = socialErrorMessage(e));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
