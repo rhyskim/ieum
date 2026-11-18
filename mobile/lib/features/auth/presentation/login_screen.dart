@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:ieum_mobile/core/network/api_exception.dart';
 import 'package:ieum_mobile/features/auth/data/auth_repository_impl.dart';
 import 'package:ieum_mobile/features/auth/domain/auth_models.dart';
+import 'package:ieum_mobile/features/notification/application/push_registrar.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
@@ -24,7 +25,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     try {
       final String socialToken = await ref.read(socialTokenSourceProvider).obtainToken(provider);
       await ref.read(authRepositoryProvider).login(provider, socialToken);
-      if (mounted) context.go('/');
+      // 이미 알림이 허용된 기기는 안내 화면 없이 조용히 등록하고, 허용 전이면 사전 안내로 간다.
+      final bool registered = await ref.read(pushRegistrarProvider).registerIfGranted();
+      if (mounted) context.go(registered ? '/' : '/notifications/intro');
     } on ApiException catch (e) {
       if (mounted) setState(() => _errorMessage = e.message);
     } finally {

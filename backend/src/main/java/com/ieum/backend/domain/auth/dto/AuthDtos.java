@@ -24,7 +24,7 @@ public final class AuthDtos {
     ) {
     }
 
-    public record LogoutRequest(@NotBlank String refreshToken) {
+    public record LogoutRequest(@NotBlank String refreshToken, @Size(max = 512) String fcmToken) {
     }
 
     public record LoginResponse(

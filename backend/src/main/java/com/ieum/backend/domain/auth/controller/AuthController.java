@@ -58,7 +58,7 @@ public class AuthController {
         @AuthenticationPrincipal CurrentUser currentUser,
         @Valid @RequestBody LogoutRequest request
     ) {
-        authService.logout(currentUser.userId(), request.refreshToken());
+        authService.logout(currentUser.userId(), request.refreshToken(), request.fcmToken());
         return ApiResponse.ok(null);
     }
 

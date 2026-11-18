@@ -7,6 +7,7 @@ import com.ieum.backend.domain.group.entity.FamilyGroup;
 import com.ieum.backend.domain.group.entity.GroupMember;
 import com.ieum.backend.domain.group.repository.FamilyGroupRepository;
 import com.ieum.backend.domain.group.repository.GroupInviteRepository;
+import com.ieum.backend.domain.group.notify.GroupNotifier;
 import com.ieum.backend.domain.group.repository.GroupMemberRepository;
 import com.ieum.backend.global.exception.BusinessException;
 import com.ieum.backend.global.exception.ErrorCode;
@@ -29,6 +30,7 @@ public class GroupMembershipService {
     private final GroupMemberRepository memberRepository;
     private final GroupInviteRepository inviteRepository;
     private final GroupProperties properties;
+    private final GroupNotifier notifier;
 
     /** 만료되지 않은 승인 대기 요청(오래된 순). */
     @Transactional(readOnly = true)
@@ -60,6 +62,7 @@ public class GroupMembershipService {
             throw new BusinessException(ErrorCode.GROUP_FULL);
         }
         target.approve(now);
+        notifier.joinApproved(groupId, targetUserId);
     }
 
     @Transactional
@@ -67,6 +70,7 @@ public class GroupMembershipService {
         lockGroup(groupId);
         requireOwner(groupId, ownerId);
         pendingOf(groupId, targetUserId).reject(Instant.now());
+        notifier.joinRejected(groupId, targetUserId);
     }
 
     /** 강퇴(REMOVED): 코드로 재입장할 수 없다. 방장 본인은 {@link #leave}를 쓴다. */
