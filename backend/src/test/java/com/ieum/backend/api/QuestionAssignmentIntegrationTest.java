@@ -285,6 +285,51 @@ class QuestionAssignmentIntegrationTest {
     }
 
     @Test
+    @DisplayName("이미 받은 질문을 비활성화해도 다음 질문을 건너뛰지 않는다")
+    void deactivatingAlreadyServedQuestionDoesNotSkipNext() throws Exception {
+        Family f = newFamily();
+        at(DAY1, 19, 0);
+        assignment.assignCurrentCycle(); // 1
+        at(DAY1.plusDays(1), 19, 0);
+        assignment.assignCurrentCycle(); // 2
+        jdbc.update("update questions set is_active = false where sequence_order in (1, 2)");
+        at(DAY1.plusDays(2), 19, 0);
+
+        assignment.assignCurrentCycle();
+
+        assertThat(servedOrders(f.groupId())).containsExactly(1, 2, 3); // count+1 방식이면 5가 배정된다
+    }
+
+    @Test
+    @DisplayName("아직 받지 않은 질문이 비활성이면 건너뛰고 그 다음 활성 질문을 배정한다")
+    void skipsUnservedInactiveQuestions() throws Exception {
+        Family f = newFamily();
+        at(DAY1, 19, 0);
+        assignment.assignCurrentCycle(); // 1
+        jdbc.update("update questions set is_active = false where sequence_order in (2, 3)");
+        at(DAY1.plusDays(1), 19, 0);
+
+        assignment.assignCurrentCycle();
+
+        assertThat(servedOrders(f.groupId())).containsExactly(1, 4);
+    }
+
+    @Test
+    @DisplayName("더 큰 순번의 활성 질문이 없으면(은행 끝) 건너뛰고 오류 로그를 남긴다")
+    void endOfBankSkipsWithErrorLog(CapturedOutput output) throws Exception {
+        Family f = newFamily();
+        at(DAY1, 19, 0);
+        assignment.assignCurrentCycle(); // 1
+        jdbc.update("update questions set is_active = false where sequence_order > 1");
+        at(DAY1.plusDays(1), 19, 0);
+
+        assertThat(assignment.assignCurrentCycle()).isZero();
+
+        assertThat(rows(f.groupId())).isEqualTo(1);
+        assertThat(output.getAll()).contains("질문 은행이 소진되어 배정을 건너뜁니다");
+    }
+
+    @Test
     @DisplayName("질문 은행이 비면 그 그룹만 건너뛰고 다른 그룹에는 영향이 없다")
     void exhaustedBankSkipsOnlyThatGroup(CapturedOutput output) throws Exception {
         jdbc.update("delete from questions where sequence_order > 2");

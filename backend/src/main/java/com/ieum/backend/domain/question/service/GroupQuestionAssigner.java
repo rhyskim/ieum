@@ -6,7 +6,6 @@ import com.ieum.backend.domain.notification.event.GroupPushEvent;
 import com.ieum.backend.domain.notification.event.GroupPushEvent.Type;
 import com.ieum.backend.domain.question.config.QuestionProperties;
 import com.ieum.backend.domain.question.repository.DailyQuestionRepository;
-import com.ieum.backend.domain.question.repository.QuestionRepository;
 import com.ieum.backend.global.common.TimeZoneConstants;
 import java.time.LocalDate;
 import java.util.UUID;
@@ -28,7 +27,6 @@ class GroupQuestionAssigner {
     enum Result { CREATED, ALREADY_ASSIGNED, BANK_EXHAUSTED }
 
     private final DailyQuestionRepository dailyQuestionRepository;
-    private final QuestionRepository questionRepository;
     private final GroupMemberRepository memberRepository;
     private final ApplicationEventPublisher publisher;
     private final QuestionProperties properties;
@@ -56,7 +54,7 @@ class GroupQuestionAssigner {
     }
 
     private void warnIfLowStock(UUID groupId) {
-        long remaining = questionRepository.countByActiveTrue() - dailyQuestionRepository.countByGroup_Id(groupId);
+        long remaining = dailyQuestionRepository.countRemaining(groupId);
         if (remaining <= properties.lowStockThreshold()) {
             log.warn("남은 질문이 {}개입니다(임계치 {}): groupId={}", remaining, properties.lowStockThreshold(), groupId);
         }
