@@ -175,6 +175,25 @@ public class GroupMembershipService {
         }
     }
 
+    /**
+     * 파기 시점에 혼자 남은 그룹을 해산한다(ADR-0002 결정 8). 내 ACTIVE 그룹을 id 오름차순으로 잠그고(복구·탈퇴와 같은 락 순서),
+     * 그룹이 ACTIVE이면서 본인을 뺀 유효 ACTIVE 멤버가 한 명도 없을 때만 {@link #dissolve}한다. 호출 시점에 본인은 이미
+     * deleted_at이 있어 유효 멤버로 세어지지 않는다. 다른 유효 멤버가 있는 그룹, 이미 해산된 그룹은 건드리지 않는다.
+     */
+    @Transactional(propagation = Propagation.MANDATORY)
+    public void dissolveGroupsLeftEmptyByPurge(UUID userId) {
+        Instant now = Instant.now();
+        for (UUID groupId : memberRepository.findMyActiveGroupIds(userId)) {
+            FamilyGroup group = lockGroup(groupId);
+            if (group.getStatus() != GroupStatus.ACTIVE || memberRepository.countValidActive(groupId) > 0) {
+                continue;
+            }
+            memberRepository.findByGroup_IdAndUser_Id(groupId, userId)
+                .filter(m -> m.getStatus() == MemberStatus.ACTIVE)
+                .ifPresent(me -> dissolve(groupId, me, now));
+        }
+    }
+
     /** 방장 후보: 본인을 뺀 유효 ACTIVE 멤버(가입 일시 → id 순). */
     private List<GroupMember> ownerCandidates(UUID groupId, UUID excludedUserId) {
         return memberRepository.findValidActive(groupId).stream()
