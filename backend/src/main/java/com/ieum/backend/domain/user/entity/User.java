@@ -1,5 +1,6 @@
 package com.ieum.backend.domain.user.entity;
 
+import com.ieum.backend.domain.common.enums.ContentChoice;
 import com.ieum.backend.domain.common.enums.FontScaleMode;
 import com.ieum.backend.domain.common.enums.MemberRole;
 import com.ieum.backend.domain.common.enums.MembershipTier;
@@ -62,6 +63,16 @@ public class User extends BaseTimeEntity {
     @Column(name = "deleted_at")
     private Instant deletedAt;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "withdraw_content_choice", length = 10)
+    private ContentChoice withdrawContentChoice;
+
+    @Column(name = "purge_started_at")
+    private Instant purgeStartedAt;
+
+    @Column(name = "purged_at")
+    private Instant purgedAt;
+
     public static User create(
         String email,
         String name,
@@ -78,12 +89,9 @@ public class User extends BaseTimeEntity {
         return user;
     }
 
-    public void markDeleted(Instant deletedAt) {
+    public void markDeleted(Instant deletedAt, ContentChoice contentChoice) {
         this.deletedAt = deletedAt;
-    }
-
-    public void restore() {
-        this.deletedAt = null;
+        this.withdrawContentChoice = contentChoice;
     }
 
     public void agreeVoiceConsent(Instant agreedAt) {

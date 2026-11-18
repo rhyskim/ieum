@@ -396,7 +396,9 @@ class AuthApiIntegrationTest {
         JsonNode device2 = login("kakao", stubKakao(subject), "기기2");
 
         mockMvc.perform(delete("/api/v1/users/me")
-                .header("Authorization", "Bearer " + device1.path("accessToken").asText()))
+                .header("Authorization", "Bearer " + device1.path("accessToken").asText())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"contentChoice\":\"KEEP\"}"))
             .andExpect(status().isOk());
 
         assertThat(refresh(device1.path("refreshToken").asText()).getResponse().getStatus()).isEqualTo(401);
