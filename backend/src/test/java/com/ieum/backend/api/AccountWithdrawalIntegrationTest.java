@@ -8,6 +8,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.ieum.backend.domain.auth.service.AccountService;
 import com.ieum.backend.domain.auth.social.AppleTokenVerifier;
 import com.ieum.backend.domain.auth.social.KakaoTokenVerifier;
 import com.ieum.backend.domain.auth.social.NaverTokenVerifier;
@@ -65,6 +66,8 @@ class AccountWithdrawalIntegrationTest {
     private TransactionTemplate tx;
     @Autowired
     private JwtProvider jwtProvider;
+    @Autowired
+    private AccountService accountService;
     @PersistenceContext
     private EntityManager em;
 
@@ -368,6 +371,30 @@ class AccountWithdrawalIntegrationTest {
             .isNull();
     }
 
+    @Test
+    @DisplayName("유예 중에 방장이 나가 그룹이 해산(ARCHIVED)되면, 복구해도 그 그룹으로는 돌아가지 않고 LEFT가 된다(Agy 검수 반영)")
+    void restoreDoesNotReturnToGroupDissolvedDuringGrace() throws Exception {
+        UUID owner = newUser("방장");
+        UUID groupId = newGroup(owner);
+        UUID member = addMember(groupId, "ACTIVE", 5);
+        String token = kakaoTokenFor(member);
+        assertThat(withdrawKeep(member)).isEqualTo(200);
+
+        // 유효 멤버가 방장뿐이므로 방장이 나가면 그룹이 해산된다.
+        int leave = mockMvc.perform(post("/api/v1/groups/" + groupId + "/leave")
+                .header("Authorization", bearer(owner))
+                .contentType(MediaType.APPLICATION_JSON).content("{}"))
+            .andReturn().getResponse().getStatus();
+        assertThat(leave).isEqualTo(200);
+        assertThat(jdbc.queryForObject("select status from family_groups where id = ?", String.class, groupId))
+            .isEqualTo("ARCHIVED");
+
+        assertThat(restore(token).getResponse().getStatus()).isEqualTo(200);
+
+        assertThat(deleted(member)).isFalse();
+        assertThat(memberStatus(groupId, member)).isEqualTo("LEFT");
+    }
+
     // ---------- 수용 기준 7: 복구와 파기 시작 경쟁 ----------
 
     @Test
@@ -402,18 +429,25 @@ class AccountWithdrawalIntegrationTest {
     }
 
     @Test
-    @DisplayName("같은 계정의 복구 2건이 동시에 와도 둘 다 성공하고 복구는 한 번만 일어난다")
+    @DisplayName("같은 계정의 복구 2건이 AccountService.restore에 동시에 진입해도 둘 다 예외 없이 끝나고 복구 결과는 하나다")
     void concurrentRestoresBothSucceedAndRestoreOnce() throws Exception {
         UUID user = newUser("동시복구");
         UUID owner = newUser("방장");
         UUID groupId = newGroup(owner);
         addExistingMember(groupId, user, "ACTIVE");
-        String token = kakaoTokenFor(user);
         assertThat(withdrawKeep(user)).isEqualTo(200);
 
+        // HTTP 경로에서는 한 요청이 먼저 커밋하면 뒤 요청이 서비스까지 오지 않을 수 있다.
+        // 서비스에 직접 동시 진입시켜 조건부 UPDATE의 0행(이미 복구됨 → 멱등 성공) 분기를 반드시 지나게 한다.
         List<Integer> statuses = runConcurrently(
-            () -> restore(token).getResponse().getStatus(),
-            () -> restore(token).getResponse().getStatus());
+            () -> {
+                accountService.restore(user);
+                return 200;
+            },
+            () -> {
+                accountService.restore(user);
+                return 200;
+            });
 
         assertThat(statuses).containsExactly(200, 200);
         assertThat(deleted(user)).isFalse();

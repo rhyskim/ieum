@@ -1,5 +1,6 @@
 package com.ieum.backend.domain.group.service;
 
+import com.ieum.backend.domain.common.enums.GroupStatus;
 import com.ieum.backend.domain.common.enums.MemberStatus;
 import com.ieum.backend.domain.group.config.GroupProperties;
 import com.ieum.backend.domain.group.dto.GroupDtos.PendingRequestResponse;
@@ -155,16 +156,18 @@ public class GroupMembershipService {
      * 복구 시 인원 상한 충돌 처리(ADR-0002 결정 12). 호출자가 users 복구 UPDATE를 먼저 반영한 같은 트랜잭션에서 부른다.
      * 내 ACTIVE 그룹을 id 오름차순으로 잠그고(승인과 같은 그룹 행 잠금), 본인을 포함한 유효 ACTIVE 수가
      * 상한을 넘으면 그 그룹의 내 멤버십을 LEFT로 바꾼다(다시 입장 요청 필요). 나머지 그룹은 그대로 복구된다.
+     * 유예 중에 해산(ARCHIVED)된 그룹(유효 멤버가 방장뿐일 때 방장이 나간 경우)으로도 돌아가지 않는다.
      */
     @Transactional(propagation = Propagation.MANDATORY)
     public void reconcileOnRestore(UUID userId) {
         Instant now = Instant.now();
         for (UUID groupId : memberRepository.findMyActiveGroupIds(userId)) {
-            lockGroup(groupId);
+            FamilyGroup group = lockGroup(groupId);
             memberRepository.findByGroup_IdAndUser_Id(groupId, userId)
                 .filter(m -> m.getStatus() == MemberStatus.ACTIVE)
                 .ifPresent(me -> {
-                    if (memberRepository.countValidActive(groupId) > properties.memberLimit()) {
+                    if (group.getStatus() != GroupStatus.ACTIVE
+                        || memberRepository.countValidActive(groupId) > properties.memberLimit()) {
                         me.changeOwner(false);
                         me.leave(now);
                     }

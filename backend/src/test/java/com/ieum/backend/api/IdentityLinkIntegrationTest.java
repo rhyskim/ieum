@@ -1,6 +1,8 @@
 package com.ieum.backend.api;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -10,25 +12,33 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.ieum.backend.domain.auth.repository.UserIdentityRepository;
 import com.ieum.backend.domain.auth.social.AppleTokenVerifier;
 import com.ieum.backend.domain.auth.social.KakaoTokenVerifier;
 import com.ieum.backend.domain.auth.social.NaverTokenVerifier;
 import com.ieum.backend.domain.auth.social.SocialProfile;
 import com.ieum.backend.domain.common.enums.OAuthProvider;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.PersistenceContext;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.CyclicBarrier;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.boot.test.mock.mockito.SpyBean;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
+import org.springframework.data.jpa.repository.support.JpaRepositoryFactory;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
@@ -55,6 +65,11 @@ class IdentityLinkIntegrationTest {
     @Autowired
     private JdbcTemplate jdbc;
 
+    @PersistenceContext
+    private EntityManager em;
+
+    @SpyBean
+    private UserIdentityRepository identityRepository;
     @MockBean
     private KakaoTokenVerifier kakao;
     @MockBean
@@ -238,6 +253,39 @@ class IdentityLinkIntegrationTest {
 
         assertThat(statuses).containsExactlyInAnyOrder(200, 409);
         assertThat(identityCount(naverSub)).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("두 요청이 모두 '아직 연결 안 됨'으로 조회한 뒤 동시에 INSERT하면 유니크 제약이 최종 방어선이 되어 행 1개, 한쪽은 409 (Agy 검수 반영)")
+    void concurrentLinkReachesUniqueConstraintAsFinalDefense() throws Exception {
+        String bearerA = loginBearer("kakao", stubKakao("k-" + UUID.randomUUID()));
+        String bearerB = loginBearer("kakao", stubKakao("k-" + UUID.randomUUID()));
+        String naverSub = "n-" + UUID.randomUUID();
+        String tokenA = stubNaver(naverSub);
+        String tokenB = stubNaver(naverSub);
+
+        // 로그인까지 끝난 뒤에 건다. 앞의 두 조회는 배리어에서 만나 둘 다 "없음"으로 답하고,
+        // 그 뒤의 조회(위반 후 재조회)는 실제 저장소에 위임한다. 인터페이스 spy는 실제 메서드를 못 부르므로
+        // 같은 EntityManager로 만든 실제 저장소를 쓴다(AuthApiIntegrationTest와 같은 방식).
+        UserIdentityRepository real = new JpaRepositoryFactory(em).getRepository(UserIdentityRepository.class);
+        CyclicBarrier afterLookup = new CyclicBarrier(2);
+        AtomicInteger lookups = new AtomicInteger();
+        doAnswer(inv -> {
+            if (lookups.incrementAndGet() <= 2) {
+                afterLookup.await(5, TimeUnit.SECONDS);
+                return Optional.empty();
+            }
+            return real.findByProviderAndSubject(inv.getArgument(0), inv.getArgument(1));
+        }).when(identityRepository).findByProviderAndSubject(any(), any());
+
+        List<Integer> statuses = runConcurrently(
+            () -> link(bearerA, "naver", tokenA).getResponse().getStatus(),
+            () -> link(bearerB, "naver", tokenB).getResponse().getStatus());
+
+        assertThat(statuses).containsExactlyInAnyOrder(200, 409);
+        assertThat(identityCount(naverSub)).isEqualTo(1);
+        // 사전 조회 2번 + 유니크 위반 뒤 재조회 1번: 최종 방어선 경로를 실제로 지났다.
+        assertThat(lookups.get()).isGreaterThanOrEqualTo(3);
     }
 
     @Test
