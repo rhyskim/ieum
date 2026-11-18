@@ -155,7 +155,7 @@ class UnconfiguredSocialTokenSource implements SocialTokenSource {
   const UnconfiguredSocialTokenSource();
 
   @override
-  Future<String> obtainToken(SocialProvider provider) {
+  Future<String> obtainToken(SocialProvider provider, {bool forceRefresh = false}) {
     throw const ApiException(
       code: 'SOCIAL_SDK_NOT_CONFIGURED',
       message: '소셜 로그인 설정이 아직 연결되지 않았습니다.',

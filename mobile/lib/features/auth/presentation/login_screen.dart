@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:ieum_mobile/core/network/api_exception.dart';
+import 'package:ieum_mobile/features/auth/application/social_auth_flow.dart';
 import 'package:ieum_mobile/features/auth/data/auth_repository_impl.dart';
 import 'package:ieum_mobile/features/auth/domain/auth_models.dart';
 import 'package:ieum_mobile/features/notification/application/push_registrar.dart';
@@ -24,8 +25,12 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       _errorMessage = null;
     });
     try {
-      final String socialToken = await ref.read(socialTokenSourceProvider).obtainToken(provider);
-      await ref.read(authRepositoryProvider).login(provider, socialToken);
+      final bool done = await runWithSocialToken(
+        ref.read(socialTokenSourceProvider),
+        provider,
+        (String token) => ref.read(authRepositoryProvider).login(provider, token),
+      );
+      if (!done) return; // 사용자가 취소함: 오류 없이 로그인 화면에 머문다.
       // 이미 알림이 허용된 기기는 안내 화면 없이 조용히 등록하고, 허용 전이면 사전 안내로 간다.
       final bool registered = await ref.read(pushRegistrarProvider).registerIfGranted();
       if (mounted) context.go(registered ? '/' : '/notifications/intro');
@@ -37,7 +42,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         }
         return;
       }
-      if (mounted) setState(() => _errorMessage = e.message);
+      if (mounted) setState(() => _errorMessage = socialErrorMessage(e));
     } finally {
       if (mounted) setState(() => _busy = false);
     }

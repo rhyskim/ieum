@@ -21,10 +21,13 @@ class _FakeRepository implements AuthRepository {
   final List<ContentChoice> withdrawn = <ContentChoice>[];
   ApiException? withdrawError;
   ApiException? restoreError;
+  int restoreErrorTimes = 1 << 30;
   final List<String> linked = <String>[];
   final List<String> unlinked = <String>[];
   ApiException? loginError;
+  int loginErrorTimes = 1 << 30;
   ApiException? linkError;
+  ApiException? linkErrorOnce;
   List<SocialProvider> identities = <SocialProvider>[SocialProvider.kakao];
   List<DeviceSession> sessions = <DeviceSession>[
     DeviceSession(id: 'a', deviceLabel: '내 아이폰', createdAt: DateTime.utc(2026, 11, 1)),
@@ -33,14 +36,14 @@ class _FakeRepository implements AuthRepository {
 
   @override
   Future<bool> login(SocialProvider provider, String socialToken, {String? deviceLabel}) async {
-    if (loginError != null) throw loginError!;
+    if (loginError != null && loginErrorTimes-- > 0) throw loginError!;
     loggedIn.add('${provider.pathSegment}:$socialToken');
     return true;
   }
 
   @override
   Future<void> restore(SocialProvider provider, String socialToken, {String? deviceLabel}) async {
-    if (restoreError != null) throw restoreError!;
+    if (restoreError != null && restoreErrorTimes-- > 0) throw restoreError!;
     restored.add('${provider.pathSegment}:$socialToken');
   }
 
@@ -58,6 +61,11 @@ class _FakeRepository implements AuthRepository {
   @override
   Future<void> linkIdentity(SocialProvider provider, String socialToken) async {
     if (linkError != null) throw linkError!;
+    if (linkErrorOnce != null) {
+      final ApiException e = linkErrorOnce!;
+      linkErrorOnce = null;
+      throw e;
+    }
     linked.add('${provider.pathSegment}:$socialToken');
     identities = <SocialProvider>[...identities, provider];
   }
@@ -82,8 +90,19 @@ class _FakeRepository implements AuthRepository {
 }
 
 class _FakeTokenSource implements SocialTokenSource {
+  _FakeTokenSource({this.cancel = false});
+
+  final bool cancel;
+
+  /// obtainToken 호출마다 forceRefresh 값을 기록한다.
+  final List<bool> calls = <bool>[];
+
   @override
-  Future<String> obtainToken(SocialProvider provider) async => 'social-${provider.name}';
+  Future<String> obtainToken(SocialProvider provider, {bool forceRefresh = false}) async {
+    calls.add(forceRefresh);
+    if (cancel) throw const SocialLoginCancelled();
+    return forceRefresh ? 'fresh-${provider.name}' : 'social-${provider.name}';
+  }
 }
 
 /// 푸시 토큰 등록 호출만 세는 대역. 실제 Firebase 없이 registerIfGranted 호출 여부를 검증한다.
@@ -109,7 +128,12 @@ class _SpyPushRegistrar implements PushRegistrar {
   Future<void> register(String token) async {}
 }
 
-Widget _app(_FakeRepository repo, Widget home, {_SpyPushRegistrar? registrar}) {
+Widget _app(
+  _FakeRepository repo,
+  Widget home, {
+  _SpyPushRegistrar? registrar,
+  _FakeTokenSource? tokenSource,
+}) {
   final GoRouter router = GoRouter(
     routes: <RouteBase>[
       GoRoute(path: '/', builder: (context, state) => home),
@@ -130,7 +154,7 @@ Widget _app(_FakeRepository repo, Widget home, {_SpyPushRegistrar? registrar}) {
   return ProviderScope(
     overrides: [
       authRepositoryProvider.overrideWithValue(repo),
-      socialTokenSourceProvider.overrideWithValue(_FakeTokenSource()),
+      socialTokenSourceProvider.overrideWithValue(tokenSource ?? _FakeTokenSource()),
       if (registrar != null) pushRegistrarProvider.overrideWithValue(registrar),
     ],
     child: MaterialApp.router(routerConfig: router),
@@ -386,5 +410,180 @@ void main() {
 
     expect(find.text('잠시 후 다시 시도해 주세요.'), findsOneWidget);
     expect(find.text('로그인 화면으로 이동'), findsNothing);
+  });
+
+  group('소셜 토큰 흐름', () {
+    const ApiException invalid = ApiException(
+      code: 'INVALID_SOCIAL_TOKEN',
+      message: '서버 원문',
+      statusCode: 401,
+    );
+    const ApiException unavailable = ApiException(
+      code: 'SOCIAL_PROVIDER_UNAVAILABLE',
+      message: '서버 원문',
+      statusCode: 503,
+    );
+
+    testWidgets('로그인: 사용자가 취소하면 서버를 호출하지 않고 오류 표시 없이 로그인 화면에 남는다', (tester) async {
+      final _FakeRepository repo = _FakeRepository();
+      await tester.pumpWidget(
+        _app(repo, const LoginScreen(), tokenSource: _FakeTokenSource(cancel: true)),
+      );
+
+      await tester.tap(find.text('카카오로 시작하기'));
+      await tester.pumpAndSettle();
+
+      expect(repo.loggedIn, isEmpty);
+      expect(find.text('카카오로 시작하기'), findsOneWidget);
+      expect(find.textContaining('다시'), findsNothing);
+      expect(find.textContaining('설정'), findsNothing);
+      expect(
+        tester.widget<ElevatedButton>(find.widgetWithText(ElevatedButton, '카카오로 시작하기')).onPressed,
+        isNotNull,
+      );
+    });
+
+    testWidgets('복구: 사용자가 취소하면 복구를 호출하지 않고 오류 표시도 없다', (tester) async {
+      final _FakeRepository repo = _FakeRepository();
+      await tester.pumpWidget(
+        _app(
+          repo,
+          RestoreScreen(provider: SocialProvider.kakao, restorableUntil: DateTime.utc(2026, 12, 17, 3)),
+          tokenSource: _FakeTokenSource(cancel: true),
+        ),
+      );
+
+      await tester.tap(find.text('계정 복구하기'));
+      await tester.pumpAndSettle();
+
+      expect(repo.restored, isEmpty);
+      expect(find.textContaining('다시 시도'), findsNothing);
+    });
+
+    testWidgets('연결: 사용자가 취소하면 연결을 호출하지 않고 오류 표시도 없다', (tester) async {
+      final _FakeRepository repo = _FakeRepository();
+      await tester.pumpWidget(
+        _app(repo, const IdentitiesScreen(), tokenSource: _FakeTokenSource(cancel: true)),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('네이버 연결'));
+      await tester.pumpAndSettle();
+
+      expect(repo.linked, isEmpty);
+      expect(find.textContaining('다시 시도'), findsNothing);
+    });
+
+    testWidgets('로그인: INVALID_SOCIAL_TOKEN이면 토큰을 강제 재발급해 1회만 재시도하고 성공한다', (tester) async {
+      final _FakeRepository repo = _FakeRepository()
+        ..loginError = invalid
+        ..loginErrorTimes = 1;
+      final _FakeTokenSource source = _FakeTokenSource();
+      await tester.pumpWidget(_app(repo, const LoginScreen(), tokenSource: source));
+
+      await tester.tap(find.text('카카오로 시작하기'));
+      await tester.pumpAndSettle();
+
+      expect(source.calls, <bool>[false, true]);
+      expect(repo.loggedIn, <String>['kakao:fresh-kakao']);
+    });
+
+    testWidgets('로그인: 재시도 후에도 INVALID_SOCIAL_TOKEN이면 더 시도하지 않고 다시 로그인 안내를 보인다', (tester) async {
+      final _FakeRepository repo = _FakeRepository()..loginError = invalid;
+      final _FakeTokenSource source = _FakeTokenSource();
+      await tester.pumpWidget(_app(repo, const LoginScreen(), tokenSource: source));
+
+      await tester.tap(find.text('카카오로 시작하기'));
+      await tester.pumpAndSettle();
+
+      expect(source.calls, <bool>[false, true]);
+      expect(find.textContaining('다시 로그인'), findsOneWidget);
+      expect(find.textContaining('잠시 후'), findsNothing);
+    });
+
+    testWidgets('로그인: 제공자 장애(503)는 재시도 없이 잠시 후 다시 시도 안내를 보인다', (tester) async {
+      final _FakeRepository repo = _FakeRepository()..loginError = unavailable;
+      final _FakeTokenSource source = _FakeTokenSource();
+      await tester.pumpWidget(_app(repo, const LoginScreen(), tokenSource: source));
+
+      await tester.tap(find.text('네이버로 시작하기'));
+      await tester.pumpAndSettle();
+
+      expect(source.calls, <bool>[false]);
+      expect(find.textContaining('잠시 후 다시 시도'), findsOneWidget);
+      expect(find.textContaining('다시 로그인'), findsNothing);
+    });
+
+    testWidgets('게이트웨이 502도 제공자 장애와 같은 안내로 매핑된다', (tester) async {
+      final _FakeRepository repo = _FakeRepository()
+        ..loginError = const ApiException(code: 'HTTP_502', message: '원문', statusCode: 502);
+      await tester.pumpWidget(_app(repo, const LoginScreen()));
+
+      await tester.tap(find.text('카카오로 시작하기'));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('잠시 후 다시 시도'), findsOneWidget);
+    });
+
+    testWidgets('복구: INVALID_SOCIAL_TOKEN이면 재발급 토큰으로 1회 재시도한다', (tester) async {
+      final _FakeRepository repo = _FakeRepository()
+        ..restoreError = invalid
+        ..restoreErrorTimes = 1;
+      final _FakeTokenSource source = _FakeTokenSource();
+      await tester.pumpWidget(
+        _app(
+          repo,
+          RestoreScreen(provider: SocialProvider.kakao, restorableUntil: DateTime.utc(2026, 12, 17, 3)),
+          tokenSource: source,
+        ),
+      );
+
+      await tester.tap(find.text('계정 복구하기'));
+      await tester.pumpAndSettle();
+
+      expect(source.calls, <bool>[false, true]);
+      expect(repo.restored, <String>['kakao:fresh-kakao']);
+    });
+
+    testWidgets('연결: INVALID_SOCIAL_TOKEN이면 재발급 토큰으로 1회 재시도한다', (tester) async {
+      final _FakeRepository repo = _FakeRepository()..linkErrorOnce = invalid;
+      final _FakeTokenSource source = _FakeTokenSource();
+      await tester.pumpWidget(_app(repo, const IdentitiesScreen(), tokenSource: source));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('네이버 연결'));
+      await tester.pumpAndSettle();
+
+      expect(source.calls, <bool>[false, true]);
+      expect(repo.linked, <String>['naver:fresh-naver']);
+    });
+
+    testWidgets('연결: 제공자 장애는 잠시 후 다시 시도 안내를 보인다', (tester) async {
+      final _FakeRepository repo = _FakeRepository()..linkError = unavailable;
+      await tester.pumpWidget(_app(repo, const IdentitiesScreen()));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('네이버 연결'));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('잠시 후 다시 시도'), findsOneWidget);
+    });
+
+    testWidgets('SDK 키가 없으면(기본 구현) 로그인 버튼이 설정 안내를 보인다', (tester) async {
+      final GoRouter router = GoRouter(
+        routes: <RouteBase>[GoRoute(path: '/', builder: (c, s) => const LoginScreen())],
+      );
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [authRepositoryProvider.overrideWithValue(_FakeRepository())],
+          child: MaterialApp.router(routerConfig: router),
+        ),
+      );
+
+      await tester.tap(find.text('카카오로 시작하기'));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('설정이 아직 연결되지 않았'), findsOneWidget);
+    });
   });
 }

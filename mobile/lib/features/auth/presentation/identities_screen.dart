@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:ieum_mobile/core/network/api_exception.dart';
+import 'package:ieum_mobile/features/auth/application/social_auth_flow.dart';
 import 'package:ieum_mobile/features/auth/data/auth_repository_impl.dart';
 import 'package:ieum_mobile/features/auth/domain/auth_models.dart';
 
@@ -20,28 +21,32 @@ class _IdentitiesScreenState extends ConsumerState<IdentitiesScreen> {
   bool _busy = false;
   String? _errorMessage;
 
-  Future<void> _run(Future<void> Function() action) async {
+  Future<void> _run(Future<bool> Function() action) async {
     setState(() {
       _busy = true;
       _errorMessage = null;
     });
     try {
-      await action();
-      ref.invalidate(linkedIdentitiesProvider);
+      if (await action()) ref.invalidate(linkedIdentitiesProvider);
     } on ApiException catch (e) {
-      if (mounted) setState(() => _errorMessage = e.message);
+      if (mounted) setState(() => _errorMessage = socialErrorMessage(e));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
   }
 
-  Future<void> _link(SocialProvider provider) => _run(() async {
-        final String token = await ref.read(socialTokenSourceProvider).obtainToken(provider);
-        await ref.read(authRepositoryProvider).linkIdentity(provider, token);
-      });
+  Future<void> _link(SocialProvider provider) => _run(
+        () => runWithSocialToken(
+          ref.read(socialTokenSourceProvider),
+          provider,
+          (String token) => ref.read(authRepositoryProvider).linkIdentity(provider, token),
+        ),
+      );
 
-  Future<void> _unlink(SocialProvider provider) =>
-      _run(() => ref.read(authRepositoryProvider).unlinkIdentity(provider));
+  Future<void> _unlink(SocialProvider provider) => _run(() async {
+        await ref.read(authRepositoryProvider).unlinkIdentity(provider);
+        return true;
+      });
 
   @override
   Widget build(BuildContext context) {
