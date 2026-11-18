@@ -5,6 +5,7 @@ import 'package:ieum_mobile/core/network/api_exception.dart';
 import 'package:ieum_mobile/features/auth/data/auth_repository_impl.dart';
 import 'package:ieum_mobile/features/auth/domain/auth_models.dart';
 import 'package:ieum_mobile/features/notification/application/push_registrar.dart';
+import 'package:ieum_mobile/features/auth/presentation/restore_screen.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
@@ -29,6 +30,13 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       final bool registered = await ref.read(pushRegistrarProvider).registerIfGranted();
       if (mounted) context.go(registered ? '/' : '/notifications/intro');
     } on ApiException catch (e) {
+      final DateTime? restorableUntil = e.restorableUntil;
+      if (e.code == 'ACCOUNT_PENDING_DELETION' && restorableUntil != null) {
+        if (mounted) {
+          context.go('/restore', extra: RestoreArgs(provider, restorableUntil));
+        }
+        return;
+      }
       if (mounted) setState(() => _errorMessage = e.message);
     } finally {
       if (mounted) setState(() => _busy = false);

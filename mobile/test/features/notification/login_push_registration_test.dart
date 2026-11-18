@@ -62,6 +62,22 @@ class _FakeAuthRepository implements AuthRepository {
   Future<bool> login(SocialProvider provider, String socialToken, {String? deviceLabel}) async =>
       false;
 
+  // account 작업으로 AuthRepository에 추가된 메서드: 이 테스트에서는 쓰지 않는다.
+  @override
+  Future<void> restore(SocialProvider provider, String socialToken, {String? deviceLabel}) async {}
+
+  @override
+  Future<void> withdraw(ContentChoice choice) async {}
+
+  @override
+  Future<List<LinkedIdentity>> fetchIdentities() async => <LinkedIdentity>[];
+
+  @override
+  Future<void> linkIdentity(SocialProvider provider, String socialToken) async {}
+
+  @override
+  Future<void> unlinkIdentity(SocialProvider provider) async {}
+
   @override
   Future<void> logout() async {}
 

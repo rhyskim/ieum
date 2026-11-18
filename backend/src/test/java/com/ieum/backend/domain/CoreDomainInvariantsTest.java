@@ -122,8 +122,8 @@ class CoreDomainInvariantsTest {
         UUID groupB = UUID.randomUUID();
         UUID userId = UUID.randomUUID();
 
-        when(repository.existsByGroup_IdAndUser_IdAndStatus(groupA, userId, MemberStatus.ACTIVE)).thenReturn(true);
-        when(repository.existsByGroup_IdAndUser_IdAndStatus(groupB, userId, MemberStatus.ACTIVE)).thenReturn(false);
+        when(repository.existsValidActive(groupA, userId)).thenReturn(true);
+        when(repository.existsValidActive(groupB, userId)).thenReturn(false);
 
         Method method = SampleGroupController.class.getDeclaredMethod("getGroupFeed", UUID.class);
         GroupMemberOnly annotation = method.getAnnotation(GroupMemberOnly.class);

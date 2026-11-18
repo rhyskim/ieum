@@ -24,10 +24,10 @@ import lombok.NoArgsConstructor;
 @Entity
 @Table(
     name = "user_identities",
-    uniqueConstraints = @UniqueConstraint(
-        name = "uq_user_identities_provider_subject",
-        columnNames = {"provider", "subject"}
-    )
+    uniqueConstraints = {
+        @UniqueConstraint(name = "uq_user_identities_provider_subject", columnNames = {"provider", "subject"}),
+        @UniqueConstraint(name = "uq_user_identities_user_provider", columnNames = {"user_id", "provider"})
+    }
 )
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class UserIdentity extends BaseCreatedEntity {

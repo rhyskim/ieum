@@ -1,6 +1,5 @@
 package com.ieum.backend.domain.group.service;
 
-import com.ieum.backend.domain.common.enums.MemberStatus;
 import com.ieum.backend.domain.group.dto.GroupDtos.CreateGroupRequest;
 import com.ieum.backend.domain.group.dto.GroupDtos.GroupDetailResponse;
 import com.ieum.backend.domain.group.dto.GroupDtos.GroupSummaryResponse;
@@ -42,7 +41,7 @@ public class GroupService {
 
     @Transactional(readOnly = true)
     public List<GroupSummaryResponse> myGroups(UUID userId) {
-        return memberRepository.findAllByUser_IdAndStatusOrderByJoinedAtAsc(userId, MemberStatus.ACTIVE).stream()
+        return memberRepository.findMyActive(userId).stream()
             .map(m -> new GroupSummaryResponse(m.getGroup().getId(), m.getGroup().getName(), m.isOwner()))
             .toList();
     }
@@ -53,8 +52,7 @@ public class GroupService {
         FamilyGroup group = groupRepository.findById(groupId)
             .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND));
         Map<UUID, String> aliases = aliasService.aliasesOf(groupId, viewerId);
-        List<MemberResponse> members = memberRepository
-            .findAllByGroup_IdAndStatusOrderByJoinedAtAscIdAsc(groupId, MemberStatus.ACTIVE).stream()
+        List<MemberResponse> members = memberRepository.findValidActive(groupId).stream()
             .map(m -> {
                 UUID targetId = m.getUser().getId();
                 String alias = aliases.get(targetId);
@@ -73,7 +71,7 @@ public class GroupService {
     }
 
     public void requireOwner(UUID groupId, UUID userId) {
-        if (!memberRepository.existsByGroup_IdAndUser_IdAndStatusAndOwnerTrue(groupId, userId, MemberStatus.ACTIVE)) {
+        if (!memberRepository.existsValidActiveOwner(groupId, userId)) {
             throw new BusinessException(ErrorCode.NOT_GROUP_OWNER);
         }
     }

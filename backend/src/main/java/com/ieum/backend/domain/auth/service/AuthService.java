@@ -39,7 +39,6 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class AuthService {
 
-    private static final Duration RESTORE_GRACE = Duration.ofDays(30);
     private static final SecureRandom RANDOM = new SecureRandom();
 
     private final List<SocialTokenVerifier> verifiers;
@@ -47,6 +46,7 @@ public class AuthService {
     private final RefreshTokenRepository refreshTokenRepository;
     private final UserRepository userRepository;
     private final UserRegistrar userRegistrar;
+    private final AccountService accountService;
     private final JwtProvider jwtProvider;
     private final JwtProperties jwtProperties;
     private final UserDeviceRepository deviceRepository;
@@ -58,6 +58,7 @@ public class AuthService {
         RefreshTokenRepository refreshTokenRepository,
         UserRepository userRepository,
         UserRegistrar userRegistrar,
+        AccountService accountService,
         JwtProvider jwtProvider,
         JwtProperties jwtProperties,
         UserDeviceRepository deviceRepository
@@ -67,6 +68,7 @@ public class AuthService {
         this.refreshTokenRepository = refreshTokenRepository;
         this.userRepository = userRepository;
         this.userRegistrar = userRegistrar;
+        this.accountService = accountService;
         this.jwtProvider = jwtProvider;
         this.jwtProperties = jwtProperties;
         this.deviceRepository = deviceRepository;
@@ -111,25 +113,13 @@ public class AuthService {
             .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND))
             .getUser();
         if (user.getDeletedAt() != null) {
+            // 마감 판단은 accountService.restore의 조건부 UPDATE(DB 시각)가 최종이다. 여기서는 빠른 실패만 한다.
             if (!Instant.now(clock).isBefore(restorableUntil(user))) {
                 throw new BusinessException(ErrorCode.ACCOUNT_RESTORE_EXPIRED);
             }
-            user.restore();
-            userRepository.save(user);
+            accountService.restore(user.getId());
         }
         return issueTokens(user, UUID.randomUUID(), request.deviceLabel(), false);
-    }
-
-    /** 탈퇴 요청: deleted_at 설정과 모든 기기 세션 폐기를 한 트랜잭션으로 처리한다. */
-    @Transactional
-    public void withdraw(UUID userId) {
-        User user = userRepository.findById(userId)
-            .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND));
-        Instant now = Instant.now(clock);
-        if (user.getDeletedAt() == null) {
-            user.markDeleted(now);
-        }
-        refreshTokenRepository.revokeAllByUser(userId, now);
     }
 
     /**
@@ -216,7 +206,7 @@ public class AuthService {
     }
 
     private static Instant restorableUntil(User user) {
-        return user.getDeletedAt().plus(RESTORE_GRACE);
+        return user.getDeletedAt().plus(AccountService.RESTORE_GRACE);
     }
 
     private LoginResponse issueTokens(User user, UUID familyId, String deviceLabel, boolean newUser) {

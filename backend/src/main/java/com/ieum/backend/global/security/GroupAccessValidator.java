@@ -1,6 +1,5 @@
 package com.ieum.backend.global.security;
 
-import com.ieum.backend.domain.common.enums.MemberStatus;
 import com.ieum.backend.domain.group.repository.GroupMemberRepository;
 import com.ieum.backend.global.exception.BusinessException;
 import com.ieum.backend.global.exception.ErrorCode;
@@ -18,11 +17,7 @@ public class GroupAccessValidator {
         if (groupId == null || userId == null) {
             throw new BusinessException(ErrorCode.GROUP_ACCESS_DENIED);
         }
-        boolean isActiveMember = groupMemberRepository.existsByGroup_IdAndUser_IdAndStatus(
-            groupId,
-            userId,
-            MemberStatus.ACTIVE
-        );
+        boolean isActiveMember = groupMemberRepository.existsValidActive(groupId, userId);
         if (!isActiveMember) {
             throw new BusinessException(ErrorCode.GROUP_ACCESS_DENIED);
         }

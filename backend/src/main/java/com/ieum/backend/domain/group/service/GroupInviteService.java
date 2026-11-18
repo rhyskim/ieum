@@ -104,7 +104,7 @@ public class GroupInviteService {
         }
 
         if (outcome.newlyRequested()) {
-            memberRepository.findFirstByGroup_IdAndStatusAndOwnerTrue(groupId, MemberStatus.ACTIVE)
+            memberRepository.findValidActiveOwner(groupId)
                 .ifPresent(owner -> notifier.joinRequested(groupId, owner.getUser().getId(), userId));
         }
         return new JoinResponse(outcome.status());

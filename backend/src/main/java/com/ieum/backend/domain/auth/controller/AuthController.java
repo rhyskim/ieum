@@ -1,11 +1,13 @@
 package com.ieum.backend.domain.auth.controller;
 
+import com.ieum.backend.domain.auth.dto.AuthDtos.IdentityResponse;
 import com.ieum.backend.domain.auth.dto.AuthDtos.LoginResponse;
 import com.ieum.backend.domain.auth.dto.AuthDtos.LogoutRequest;
 import com.ieum.backend.domain.auth.dto.AuthDtos.RefreshRequest;
 import com.ieum.backend.domain.auth.dto.AuthDtos.SessionResponse;
 import com.ieum.backend.domain.auth.dto.AuthDtos.SocialLoginRequest;
 import com.ieum.backend.domain.auth.service.AuthService;
+import com.ieum.backend.domain.auth.service.IdentityLinkService;
 import com.ieum.backend.domain.common.enums.OAuthProvider;
 import com.ieum.backend.global.common.ApiResponse;
 import com.ieum.backend.global.exception.BusinessException;
@@ -31,6 +33,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class AuthController {
 
     private final AuthService authService;
+    private final IdentityLinkService identityLinkService;
 
     @PostMapping("/{provider}")
     public ApiResponse<LoginResponse> socialLogin(
@@ -73,6 +76,30 @@ public class AuthController {
         @PathVariable UUID id
     ) {
         authService.revokeSession(currentUser.userId(), id);
+        return ApiResponse.ok(null);
+    }
+
+    @GetMapping("/identities")
+    public ApiResponse<List<IdentityResponse>> identities(@AuthenticationPrincipal CurrentUser currentUser) {
+        return ApiResponse.ok(identityLinkService.list(currentUser.userId()));
+    }
+
+    @PostMapping("/identities/{provider}")
+    public ApiResponse<Void> linkIdentity(
+        @AuthenticationPrincipal CurrentUser currentUser,
+        @PathVariable String provider,
+        @Valid @RequestBody SocialLoginRequest request
+    ) {
+        identityLinkService.link(currentUser.userId(), parseProvider(provider), request.token());
+        return ApiResponse.ok(null);
+    }
+
+    @DeleteMapping("/identities/{provider}")
+    public ApiResponse<Void> unlinkIdentity(
+        @AuthenticationPrincipal CurrentUser currentUser,
+        @PathVariable String provider
+    ) {
+        identityLinkService.unlink(currentUser.userId(), parseProvider(provider));
         return ApiResponse.ok(null);
     }
 

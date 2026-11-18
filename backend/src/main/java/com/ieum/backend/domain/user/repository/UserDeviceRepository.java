@@ -7,6 +7,7 @@ import java.util.UUID;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 public interface UserDeviceRepository extends JpaRepository<UserDevice, UUID> {
 
@@ -35,4 +36,9 @@ public interface UserDeviceRepository extends JpaRepository<UserDevice, UUID> {
 
     @Query("select d.fcmToken from UserDevice d where d.user.id = :userId")
     List<String> findTokensByUserId(UUID userId);
+
+    /** 탈퇴 요청: 푸시 대상에서 즉시 빠지도록 기기 토큰(FCM)을 모두 삭제한다. 없어도 성공(멱등). */
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
+    @Query("delete from UserDevice d where d.user.id = :userId")
+    int deleteAllByUserId(@Param("userId") UUID userId);
 }

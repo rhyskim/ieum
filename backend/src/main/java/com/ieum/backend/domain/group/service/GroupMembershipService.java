@@ -1,5 +1,6 @@
 package com.ieum.backend.domain.group.service;
 
+import com.ieum.backend.domain.common.enums.GroupStatus;
 import com.ieum.backend.domain.common.enums.MemberStatus;
 import com.ieum.backend.domain.group.config.GroupProperties;
 import com.ieum.backend.domain.group.dto.GroupDtos.PendingRequestResponse;
@@ -16,6 +17,7 @@ import java.util.List;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
@@ -37,7 +39,7 @@ public class GroupMembershipService {
     public List<PendingRequestResponse> pendingRequests(UUID groupId, UUID ownerId) {
         requireOwner(groupId, ownerId);
         Instant now = Instant.now();
-        return memberRepository.findAllByGroup_IdAndStatusOrderByRequestedAtAsc(groupId, MemberStatus.PENDING)
+        return memberRepository.findValidPending(groupId)
             .stream()
             .filter(m -> !isExpired(m, now))
             .map(m -> new PendingRequestResponse(
@@ -57,7 +59,7 @@ public class GroupMembershipService {
         if (isExpired(target, now)) {
             throw new BusinessException(ErrorCode.JOIN_REQUEST_EXPIRED);
         }
-        if (memberRepository.countByGroup_IdAndStatus(groupId, MemberStatus.ACTIVE) >= properties.memberLimit()) {
+        if (memberRepository.countValidActive(groupId) >= properties.memberLimit()) {
             // 상한에 걸린 요청은 PENDING으로 남아 2일 만료까지 대기한다.
             throw new BusinessException(ErrorCode.GROUP_FULL);
         }
@@ -78,7 +80,7 @@ public class GroupMembershipService {
     public void remove(UUID groupId, UUID ownerId, UUID targetUserId) {
         lockGroup(groupId);
         requireOwner(groupId, ownerId);
-        GroupMember target = memberRepository.findByGroup_IdAndUser_Id(groupId, targetUserId)
+        GroupMember target = memberRepository.findValid(groupId, targetUserId)
             .filter(m -> m.getStatus() == MemberStatus.ACTIVE)
             .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND));
         if (target.isOwner()) {
@@ -104,10 +106,7 @@ public class GroupMembershipService {
             return;
         }
 
-        List<GroupMember> candidates = memberRepository
-            .findAllByGroup_IdAndStatusOrderByJoinedAtAscIdAsc(groupId, MemberStatus.ACTIVE).stream()
-            .filter(m -> !m.getUser().getId().equals(userId))
-            .toList();
+        List<GroupMember> candidates = ownerCandidates(groupId, userId);
 
         if (candidates.isEmpty()) {
             dissolve(groupId, me, now);
@@ -127,12 +126,67 @@ public class GroupMembershipService {
         successor.changeOwner(true);
     }
 
+    /**
+     * 탈퇴 요청 시 방장 위임(ADR-0003 규칙: 가장 오래된 유효 ACTIVE 멤버, 가입 일시 → id). 호출자의 트랜잭션 안에서,
+     * 호출자가 이미 users 행을 잠그고 deleted_at을 반영(flush)한 뒤 부른다. 내가 방장인 그룹을 id 오름차순으로
+     * 잠가 교착을 피한다. {@link #leave}와 달리 내 멤버십은 ACTIVE로 두고(복구 대비), 후보가 없는 그룹은
+     * 해산하지 않고 그대로 둔다(파기 시점에 해산, PR 2). 복구해도 방장은 돌아오지 않는다.
+     */
+    @Transactional(propagation = Propagation.MANDATORY)
+    public void delegateOwnershipsOnWithdrawal(UUID userId) {
+        for (UUID groupId : memberRepository.findMyOwnedActiveGroupIds(userId)) {
+            lockGroup(groupId);
+            // 잠근 뒤에 멤버십을 새로 읽는다: 잠금 전에 다른 트랜잭션이 방장을 바꿨을 수 있다.
+            GroupMember me = memberRepository.findByGroup_IdAndUser_Id(groupId, userId).orElse(null);
+            if (me == null || me.getStatus() != MemberStatus.ACTIVE || !me.isOwner()) {
+                continue;
+            }
+            List<GroupMember> candidates = ownerCandidates(groupId, userId);
+            if (candidates.isEmpty()) {
+                continue;
+            }
+            // 부분 유니크 인덱스(그룹당 ACTIVE 방장 1명): 이전 방장을 먼저 내리고 flush한 뒤 승계시킨다.
+            me.changeOwner(false);
+            memberRepository.saveAndFlush(me);
+            candidates.get(0).changeOwner(true);
+        }
+    }
+
+    /**
+     * 복구 시 인원 상한 충돌 처리(ADR-0002 결정 12). 호출자가 users 복구 UPDATE를 먼저 반영한 같은 트랜잭션에서 부른다.
+     * 내 ACTIVE 그룹을 id 오름차순으로 잠그고(승인과 같은 그룹 행 잠금), 본인을 포함한 유효 ACTIVE 수가
+     * 상한을 넘으면 그 그룹의 내 멤버십을 LEFT로 바꾼다(다시 입장 요청 필요). 나머지 그룹은 그대로 복구된다.
+     * 유예 중에 해산(ARCHIVED)된 그룹(유효 멤버가 방장뿐일 때 방장이 나간 경우)으로도 돌아가지 않는다.
+     */
+    @Transactional(propagation = Propagation.MANDATORY)
+    public void reconcileOnRestore(UUID userId) {
+        Instant now = Instant.now();
+        for (UUID groupId : memberRepository.findMyActiveGroupIds(userId)) {
+            FamilyGroup group = lockGroup(groupId);
+            memberRepository.findByGroup_IdAndUser_Id(groupId, userId)
+                .filter(m -> m.getStatus() == MemberStatus.ACTIVE)
+                .ifPresent(me -> {
+                    if (group.getStatus() != GroupStatus.ACTIVE
+                        || memberRepository.countValidActive(groupId) > properties.memberLimit()) {
+                        me.changeOwner(false);
+                        me.leave(now);
+                    }
+                });
+        }
+    }
+
+    /** 방장 후보: 본인을 뺀 유효 ACTIVE 멤버(가입 일시 → id 순). */
+    private List<GroupMember> ownerCandidates(UUID groupId, UUID excludedUserId) {
+        return memberRepository.findValidActive(groupId).stream()
+            .filter(m -> !m.getUser().getId().equals(excludedUserId))
+            .toList();
+    }
+
     private void dissolve(UUID groupId, GroupMember lastOwner, Instant now) {
         lastOwner.changeOwner(false);
         lastOwner.leave(now);
         memberRepository.saveAndFlush(lastOwner);
-        memberRepository.findAllByGroup_IdAndStatusOrderByRequestedAtAsc(groupId, MemberStatus.PENDING)
-            .forEach(m -> m.reject(now));
+        memberRepository.findValidPending(groupId).forEach(m -> m.reject(now));
         inviteRepository.deactivateActiveByGroupId(groupId);
         groupRepository.findById(groupId).ifPresent(FamilyGroup::archive);
     }
@@ -143,13 +197,13 @@ public class GroupMembershipService {
     }
 
     private void requireOwner(UUID groupId, UUID userId) {
-        if (!memberRepository.existsByGroup_IdAndUser_IdAndStatusAndOwnerTrue(groupId, userId, MemberStatus.ACTIVE)) {
+        if (!memberRepository.existsValidActiveOwner(groupId, userId)) {
             throw new BusinessException(ErrorCode.NOT_GROUP_OWNER);
         }
     }
 
     private GroupMember pendingOf(UUID groupId, UUID targetUserId) {
-        return memberRepository.findByGroup_IdAndUser_Id(groupId, targetUserId)
+        return memberRepository.findValid(groupId, targetUserId)
             .filter(m -> m.getStatus() == MemberStatus.PENDING)
             .orElseThrow(() -> new BusinessException(ErrorCode.JOIN_REQUEST_NOT_FOUND));
     }
