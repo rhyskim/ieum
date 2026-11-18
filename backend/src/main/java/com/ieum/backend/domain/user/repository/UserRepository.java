@@ -18,6 +18,15 @@ public interface UserRepository extends JpaRepository<User, UUID> {
     Optional<User> findByIdForUpdate(@Param("id") UUID id);
 
     /**
+     * 답변 저장이 쓰는 공유 잠금(SELECT ... FOR SHARE). withdraw의 FOR UPDATE와는 줄을 서지만 저장끼리는 서로 막지 않는다.
+     * 답변 INSERT가 users 행에 거는 FK KEY SHARE와 충돌하는 FOR UPDATE를 저장이 dq를 잡은 뒤에 만나지 않도록,
+     * 락 순서의 첫 단계에서 미리 잡는다(ADR-0007 결정 9).
+     */
+    @Lock(LockModeType.PESSIMISTIC_READ)
+    @Query("select u from User u where u.id = :id")
+    Optional<User> findByIdForShare(@Param("id") UUID id);
+
+    /**
      * 복구의 조건부 UPDATE(ADR-0002 결정 6·10). 같은 행에 대한 파기 시작(purge_started_at 기록)과 한쪽만 성공한다.
      * 복구 마감(탈퇴 후 graceDays일)은 DB 시각 기준이고, 파기가 이미 시작된 계정(purge_started_at 있음)은
      * 앱 서버 간 시계 차이가 있어도 복구되지 않는다. 0행이면 복구 불가(만료·파기 시작)이거나 이미 복구된 상태다.

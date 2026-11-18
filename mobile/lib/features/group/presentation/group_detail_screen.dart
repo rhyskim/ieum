@@ -23,6 +23,11 @@ class GroupDetailScreen extends ConsumerWidget {
           data: (GroupDetail group) => ListView(
             padding: const EdgeInsets.all(24),
             children: <Widget>[
+              LargeButton(
+                label: '오늘의 질문',
+                onPressed: () => context.push('/groups/$groupId/question'),
+              ),
+              const SizedBox(height: 12),
               if (group.iAmOwner) ...<Widget>[
                 LargeButton(
                   label: '입장 코드 보기',

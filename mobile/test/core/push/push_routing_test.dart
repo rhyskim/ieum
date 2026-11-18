@@ -20,6 +20,19 @@ void main() {
     );
   });
 
+  test('새 질문·모두 답변 알림은 해당 그룹의 오늘의 질문 화면으로 이동한다', () {
+    expect(
+      routeForPush(<String, String>{'type': 'QUESTION_ASSIGNED', 'groupId': 'g-1'}),
+      '/groups/g-1/question',
+    );
+    expect(
+      routeForPush(<String, String>{'type': 'ALL_ANSWERED', 'groupId': 'g-1'}),
+      '/groups/g-1/question',
+    );
+    expect(routeForPush(<String, String>{'type': 'QUESTION_ASSIGNED', 'groupId': '../x'}), isNull);
+    expect(routeForPush(<String, String>{'type': 'QUESTION_ASSIGNED'}), isNull);
+  });
+
   test('알 수 없는 type이거나 groupId가 없거나 경로 조작 문자가 있으면 이동하지 않는다', () {
     expect(routeForPush(<String, String>{'type': 'UNKNOWN', 'groupId': 'g-1'}), isNull);
     expect(routeForPush(<String, String>{'type': 'JOIN_REQUESTED'}), isNull);

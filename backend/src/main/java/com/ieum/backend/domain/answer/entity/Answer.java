@@ -141,6 +141,11 @@ public class Answer extends BaseTimeEntity {
         return answer;
     }
 
+    /** 텍스트 답변 수정. 공개 상태는 건드리지 않는다(ADR-0007 결정 7). */
+    public void editText(String textContent) {
+        this.textContent = textContent;
+    }
+
     /**
      * D-7 만료 사전 알림 발송 완료 시 ACTIVE -> EXPIRING_NOTIFIED 로 전환합니다.
      */
