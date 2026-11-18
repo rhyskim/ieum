@@ -9,6 +9,7 @@ import 'package:ieum_mobile/features/auth/domain/auth_repository.dart';
 import 'package:ieum_mobile/features/auth/presentation/identities_screen.dart';
 import 'package:ieum_mobile/features/auth/presentation/login_screen.dart';
 import 'package:ieum_mobile/features/auth/presentation/restore_screen.dart';
+import 'package:ieum_mobile/features/auth/presentation/withdraw_screen.dart';
 import 'package:ieum_mobile/features/auth/presentation/sessions_screen.dart';
 
 class _FakeRepository implements AuthRepository {
@@ -16,6 +17,8 @@ class _FakeRepository implements AuthRepository {
   final List<String> revoked = <String>[];
   int logoutCount = 0;
   final List<String> restored = <String>[];
+  final List<ContentChoice> withdrawn = <ContentChoice>[];
+  ApiException? withdrawError;
   final List<String> linked = <String>[];
   final List<String> unlinked = <String>[];
   ApiException? loginError;
@@ -36,6 +39,12 @@ class _FakeRepository implements AuthRepository {
   @override
   Future<void> restore(SocialProvider provider, String socialToken, {String? deviceLabel}) async {
     restored.add('${provider.pathSegment}:$socialToken');
+  }
+
+  @override
+  Future<void> withdraw(ContentChoice choice) async {
+    if (withdrawError != null) throw withdrawError!;
+    withdrawn.add(choice);
   }
 
   @override
@@ -234,5 +243,57 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('이미 다른 이음 계정으로 가입된 소셜 계정이에요.'), findsOneWidget);
+  });
+
+  testWidgets('탈퇴 화면: 쉬운 말 선택지·30일 복구 안내가 보이고, 선택 전에는 탈퇴 버튼이 비활성이다', (tester) async {
+    await tester.pumpWidget(_app(_FakeRepository(), const WithdrawScreen()));
+
+    expect(find.textContaining('30일 안에'), findsOneWidget);
+    expect(find.text('가족에게 계속 보여 주기'), findsOneWidget);
+    expect(find.text('모두 지우기'), findsOneWidget);
+    final Finder button = find.widgetWithText(ElevatedButton, '탈퇴하기');
+    expect(tester.getSize(button).height, greaterThanOrEqualTo(56));
+    expect(tester.widget<ElevatedButton>(button).onPressed, isNull);
+  });
+
+  testWidgets('탈퇴 화면: 선택 후 확인 단계를 거쳐야 서버를 호출하고, 취소하면 호출하지 않는다', (tester) async {
+    final _FakeRepository repo = _FakeRepository();
+    await tester.pumpWidget(_app(repo, const WithdrawScreen()));
+
+    await tester.tap(find.text('모두 지우기'));
+    await tester.pump();
+    await tester.tap(find.widgetWithText(ElevatedButton, '탈퇴하기'));
+    await tester.pumpAndSettle();
+
+    // 확인 단계: 아직 서버 호출 전
+    expect(find.text('정말 탈퇴할까요?'), findsOneWidget);
+    expect(repo.withdrawn, isEmpty);
+    await tester.tap(find.text('계속 이용하기'));
+    await tester.pumpAndSettle();
+    expect(repo.withdrawn, isEmpty);
+
+    await tester.tap(find.widgetWithText(ElevatedButton, '탈퇴하기'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(TextButton, '탈퇴하기'));
+    await tester.pumpAndSettle();
+
+    expect(repo.withdrawn, <ContentChoice>[ContentChoice.delete]);
+    expect(find.text('로그인 화면으로 이동'), findsOneWidget);
+  });
+
+  testWidgets('탈퇴 화면: 서버가 거절하면 안내 문구를 보여 주고 화면에 남는다', (tester) async {
+    final _FakeRepository repo = _FakeRepository()
+      ..withdrawError = const ApiException(code: 'INTERNAL_ERROR', message: '잠시 후 다시 시도해 주세요.', statusCode: 500);
+    await tester.pumpWidget(_app(repo, const WithdrawScreen()));
+
+    await tester.tap(find.text('가족에게 계속 보여 주기'));
+    await tester.pump();
+    await tester.tap(find.widgetWithText(ElevatedButton, '탈퇴하기'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(TextButton, '탈퇴하기'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('잠시 후 다시 시도해 주세요.'), findsOneWidget);
+    expect(find.text('로그인 화면으로 이동'), findsNothing);
   });
 }

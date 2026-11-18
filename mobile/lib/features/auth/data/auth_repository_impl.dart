@@ -30,6 +30,17 @@ class AuthRepositoryImpl implements AuthRepository {
       _authenticate('/api/v1/auth/${provider.pathSegment}/restore', socialToken, deviceLabel);
 
   @override
+  Future<void> withdraw(ContentChoice choice) async {
+    await _send(
+      () => _dio.delete<Map<String, dynamic>>(
+        '/api/v1/users/me',
+        data: <String, String>{'contentChoice': choice.apiValue},
+      ),
+    );
+    await _store.clear();
+  }
+
+  @override
   Future<List<LinkedIdentity>> fetchIdentities() async {
     final Object? data = await _send(
       () => _dio.get<Map<String, dynamic>>('/api/v1/auth/identities'),

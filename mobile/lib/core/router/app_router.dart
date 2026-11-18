@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:ieum_mobile/features/auth/presentation/identities_screen.dart';
 import 'package:ieum_mobile/features/auth/presentation/login_screen.dart';
 import 'package:ieum_mobile/features/auth/presentation/restore_screen.dart';
+import 'package:ieum_mobile/features/auth/presentation/withdraw_screen.dart';
 import 'package:ieum_mobile/features/auth/presentation/sessions_screen.dart';
 import 'package:ieum_mobile/features/bootstrap/presentation/phase0_bootstrap_screen.dart';
 import 'package:ieum_mobile/features/group/presentation/create_group_screen.dart';
@@ -41,6 +42,10 @@ GoRouter appRouter(Ref ref) {
           final RestoreArgs args = state.extra! as RestoreArgs;
           return RestoreScreen(provider: args.provider, restorableUntil: args.restorableUntil);
         },
+      ),
+      GoRoute(
+        path: '/withdraw',
+        builder: (context, state) => const WithdrawScreen(),
       ),
       GoRoute(
         path: '/identities',

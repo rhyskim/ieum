@@ -17,6 +17,16 @@ enum SocialProvider {
       SocialProvider.values.firstWhere((p) => p.name == name.toLowerCase());
 }
 
+/// 탈퇴 시 내가 쓴 글·목소리 처리 선택. 서버 `DELETE /api/v1/users/me`의 `contentChoice` 값.
+enum ContentChoice {
+  keep('KEEP'),
+  delete('DELETE');
+
+  const ContentChoice(this.apiValue);
+
+  final String apiValue;
+}
+
 /// 내 계정에 연결된 로그인 수단 한 개.
 class LinkedIdentity {
   const LinkedIdentity({required this.provider, required this.linkedAt});
