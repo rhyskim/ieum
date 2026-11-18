@@ -76,10 +76,13 @@ class _AnswerComposeScreenState extends ConsumerState<AnswerComposeScreen> {
               maxLines: 12,
               style: const TextStyle(fontSize: 20),
               keyboardType: TextInputType.multiline,
+              maxLength: maxAnswerLength,
               decoration: const InputDecoration(
                 labelText: '내 답변',
                 hintText: '떠오르는 대로 편하게 써 주세요.',
                 border: OutlineInputBorder(),
+                // 글자 수 안내(예: 120/2000)도 본문 기준 18sp 이상으로 보여 준다.
+                counterStyle: TextStyle(fontSize: 18),
               ),
               onChanged: (_) => setState(() => _error = null),
             ),

@@ -14,6 +14,9 @@ enum RevealStatus {
 /// 답변 최소 글자 수(공백 제외). 서버가 최종 검사하며 화면은 미리 안내만 한다.
 const int minAnswerLength = 30;
 
+/// 답변 최대 글자 수(공백 포함, 오너 확정). 서버도 같은 값으로 거절한다.
+const int maxAnswerLength = 2000;
+
 /// 공백을 뺀 글자 수. 서버와 같은 기준(공백·줄바꿈 제외)으로 센다.
 int countNonWhitespace(String text) =>
     text.runes.where((int r) => !RegExp(r'\s').hasMatch(String.fromCharCode(r))).length;

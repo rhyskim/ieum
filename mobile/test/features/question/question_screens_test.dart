@@ -167,6 +167,21 @@ void main() {
     expect(tester.getSize(find.widgetWithText(ElevatedButton, '저장하기')).height, greaterThanOrEqualTo(56));
   });
 
+  testWidgets('작성: 2000자까지만 입력되고 현재 글자 수가 18sp 이상으로 안내된다', (tester) async {
+    await _openCompose(tester, _FakeQuestionRepository());
+
+    expect(tester.widget<TextField>(find.byType(TextField)).maxLength, 2000);
+    await tester.enterText(find.byType(TextField), '가' * 120);
+    await tester.pump();
+    final Finder counter = find.text('120/2000');
+    expect(counter, findsOneWidget);
+    expect(tester.widget<Text>(counter).style?.fontSize ?? 0, greaterThanOrEqualTo(18));
+
+    await tester.enterText(find.byType(TextField), '가' * 2100);
+    await tester.pump();
+    expect(tester.widget<TextField>(find.byType(TextField)).controller!.text.length, 2000); // 초과 입력은 잘린다
+  });
+
   testWidgets('작성: 30자 이상이면 서버에 저장하고, 서버가 거절하면 그 안내를 보여 준다', (tester) async {
     final _FakeQuestionRepository repo = _FakeQuestionRepository();
     await _openCompose(tester, repo);

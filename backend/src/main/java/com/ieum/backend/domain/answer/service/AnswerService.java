@@ -26,6 +26,9 @@ public class AnswerService {
     /** 공백 제외 최소 글자 수(수정도 동일). */
     public static final int MIN_TEXT_LENGTH = 30;
 
+    /** 공백 포함 최대 글자 수(오너 확정). 초과는 INVALID_INPUT(400)으로 거절한다. */
+    public static final int MAX_TEXT_LENGTH = 2000;
+
     private final DailyQuestionRepository dailyQuestionRepository;
     private final AnswerRepository answerRepository;
     private final UserRepository userRepository;
@@ -36,6 +39,9 @@ public class AnswerService {
 
     @Transactional
     public AnswerResponse save(UUID groupId, UUID dailyQuestionId, UUID userId, String rawText) {
+        if (rawText.codePointCount(0, rawText.length()) > MAX_TEXT_LENGTH) {
+            throw new BusinessException(ErrorCode.INVALID_INPUT, "답변은 " + MAX_TEXT_LENGTH + "자까지 쓸 수 있어요.");
+        }
         String text = rawText.strip();
         if (countNonWhitespace(text) < MIN_TEXT_LENGTH) {
             throw new BusinessException(ErrorCode.ANSWER_TOO_SHORT);

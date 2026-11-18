@@ -452,6 +452,25 @@ class AnswerRevealIntegrationTest {
     }
 
     @Test
+    @DisplayName("공백 포함 2000자까지 저장되고 2001자는 400으로 거절된다(수정도 동일)")
+    void maximumLengthIs2000IncludingWhitespace() throws Exception {
+        Family f = newFamily(2);
+        at(DAY1, 20, 0);
+        UUID mom = f.members().get(0);
+        // 2000자: 공백이 섞여 있어도 공백 포함으로 센다(양 끝 공백이 아니므로 strip 영향 없음).
+        String max = "가나 ".repeat(666) + "다라"; // 666*3 + 2 = 2000
+        assertThat(max.length()).isEqualTo(2000);
+        assertThat(putStatus(f, mom, max)).isEqualTo(200);
+
+        assertThat(putStatus(f, mom, max + "마")).isEqualTo(400);
+        assertThat(putStatus(f, f.members().get(1), "가".repeat(2001))).isEqualTo(400);
+        assertThat(jdbc.queryForObject("select length(text_content) from answers where daily_question_id = ? and user_id = ?",
+            Integer.class, f.dqId(), mom)).isEqualTo(2000); // 거절된 수정은 기존 답변을 바꾸지 않는다
+        assertThat(jdbc.queryForObject("select count(*) from answers where user_id = ?", Integer.class, f.members().get(1)))
+            .isZero();
+    }
+
+    @Test
     @DisplayName("수정도 30자 규칙을 적용하고 거절되면 기존 답변이 유지된다. 공개된 뒤에 수정해도 상태는 유지된다")
     void editIsValidatedAndKeepsRevealAfterReveal() throws Exception {
         Family f = newFamily(2);
