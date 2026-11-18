@@ -90,7 +90,8 @@ class _FakeAuthRepository implements AuthRepository {
 
 class _FakeTokenSource implements SocialTokenSource {
   @override
-  Future<String> obtainToken(SocialProvider provider) async => 'social-token';
+  Future<String> obtainToken(SocialProvider provider, {bool forceRefresh = false}) async =>
+      'social-token';
 }
 
 ProviderContainer _container(_FakePushService push, _FakeDeviceRepository devices) {
