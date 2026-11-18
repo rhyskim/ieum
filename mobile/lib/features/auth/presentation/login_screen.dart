@@ -24,7 +24,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     try {
       final String socialToken = await ref.read(socialTokenSourceProvider).obtainToken(provider);
       await ref.read(authRepositoryProvider).login(provider, socialToken);
-      if (mounted) context.go('/');
+      if (mounted) context.go('/notifications/intro');
     } on ApiException catch (e) {
       if (mounted) setState(() => _errorMessage = e.message);
     } finally {

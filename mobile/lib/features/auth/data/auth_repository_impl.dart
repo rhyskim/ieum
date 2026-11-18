@@ -5,6 +5,7 @@ import 'package:ieum_mobile/core/auth/auth_token_store.dart';
 import 'package:ieum_mobile/core/auth/token_pair.dart';
 import 'package:ieum_mobile/core/network/api_exception.dart';
 import 'package:ieum_mobile/core/network/dio_provider.dart';
+import 'package:ieum_mobile/core/push/push_service.dart';
 import 'package:ieum_mobile/features/auth/domain/auth_models.dart';
 import 'package:ieum_mobile/features/auth/domain/auth_repository.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
@@ -12,10 +13,13 @@ import 'package:riverpod_annotation/riverpod_annotation.dart';
 part 'auth_repository_impl.g.dart';
 
 class AuthRepositoryImpl implements AuthRepository {
-  const AuthRepositoryImpl(this._dio, this._store);
+  const AuthRepositoryImpl(this._dio, this._store, [this._readFcmToken]);
 
   final Dio _dio;
   final AuthTokenStore _store;
+
+  /// 로그아웃 시 이 기기의 푸시 토큰을 서버에서 해제하기 위해 읽는다. 없거나 실패하면 생략한다.
+  final Future<String?> Function()? _readFcmToken;
 
   @override
   Future<bool> login(SocialProvider provider, String socialToken, {String? deviceLabel}) async {
@@ -42,10 +46,14 @@ class AuthRepositoryImpl implements AuthRepository {
     try {
       final String? refreshToken = await _store.readRefreshToken();
       if (refreshToken != null) {
+        final String? fcmToken = await _safeFcmToken();
         await _send(
           () => _dio.post<Map<String, dynamic>>(
             '/api/v1/auth/logout',
-            data: <String, String>{'refreshToken': refreshToken},
+            data: <String, String>{
+              'refreshToken': refreshToken,
+              if (fcmToken != null) 'fcmToken': fcmToken,
+            },
           ),
         );
       }
@@ -53,6 +61,14 @@ class AuthRepositoryImpl implements AuthRepository {
       // 네트워크가 끊겼어도 이 기기에서는 로그아웃돼야 한다. 서버 세션은 만료로 정리된다.
     } finally {
       await _store.clear();
+    }
+  }
+
+  Future<String?> _safeFcmToken() async {
+    try {
+      return await _readFcmToken?.call();
+    } on Object {
+      return null;
     }
   }
 
@@ -102,8 +118,11 @@ class UnconfiguredSocialTokenSource implements SocialTokenSource {
 }
 
 @riverpod
-AuthRepository authRepository(Ref ref) =>
-    AuthRepositoryImpl(ref.watch(dioProvider), ref.watch(authTokenStoreProvider));
+AuthRepository authRepository(Ref ref) => AuthRepositoryImpl(
+      ref.watch(dioProvider),
+      ref.watch(authTokenStoreProvider),
+      ref.watch(pushServiceProvider).getToken,
+    );
 
 @riverpod
 SocialTokenSource socialTokenSource(Ref ref) => const UnconfiguredSocialTokenSource();

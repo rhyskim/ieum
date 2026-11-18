@@ -11,6 +11,7 @@ import 'package:ieum_mobile/features/group/presentation/invite_code_screen.dart'
 import 'package:ieum_mobile/features/group/presentation/join_screen.dart';
 import 'package:ieum_mobile/features/group/presentation/pending_requests_screen.dart';
 import 'package:ieum_mobile/features/group/presentation/support_screen.dart';
+import 'package:ieum_mobile/features/notification/presentation/push_intro_screen.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 part 'app_router.g.dart';
@@ -27,6 +28,10 @@ GoRouter appRouter(Ref ref) {
       GoRoute(
         path: '/login',
         builder: (context, state) => const LoginScreen(),
+      ),
+      GoRoute(
+        path: '/notifications/intro',
+        builder: (context, state) => const PushIntroScreen(),
       ),
       GoRoute(
         path: '/sessions',
