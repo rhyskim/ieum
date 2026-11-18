@@ -33,7 +33,8 @@
 매일 04:00 KST, ShedLock `account-purge`. 사용자 1명 단위: ① 클레임 UPDATE(`purge_started_at`을 30분 임대로 기록, `deleted_at <= now-31일 AND purged_at IS NULL AND (purge_started_at IS NULL OR 30분 경과)`; 0행이면 건너뜀) → ② S3 삭제(콘텐츠 선택이 DELETE일 때, 멱등, 실패 시 DB 보존·중단) → ③ DB 한 트랜잭션(콘텐츠 선택 실행의 DB 부분, `user_identities`·`refresh_tokens`·`user_devices` 삭제, 내가 보는 사람인 `member_aliases` 삭제, `group_members` 익명화, 혼자 남은 그룹 `archive`, Apple 큐 INSERT, `users` 익명화 + 마지막에 `purged_at`).
 - 익명화: NOT NULL 컬럼(`users.name`, `group_members.family_nickname`)에는 `'탈퇴한 사용자'`를 넣고, 이메일·전화·`target_call_phone`은 NULL. **ADR 8의 "이메일·전화 익명화용 제약 완화"에 해당하는 제약은 코드에서 찾지 못했다(이미 NULL 허용). Root 확인: 완화할 제약이 없으면 위 방식.**
 - 테스트(PR 2): 31일 미만 비대상, 이중 실행 동일 결과, 단계별 실패 주입 후 재실행, S3 실패 시 DB 행 보존, 서버 2대 동시 실행 이중 처리 없음, 파기 후 같은 소셜 계정으로 새 가입.
-- **미정**: 콘텐츠 `DELETE` 범위(리액션 포함 여부). ADR 결정 3 "리액션은 유지"와 작업지시서 "리액션도 삭제"가 충돌하여 Root가 오너에게 확인 중. PR 2 착수 전 확정.
+- **확정(ADR-0002 결정 14)**: `DELETE`는 본인이 쓴 답변(텍스트·음성 S3)만 삭제한다. 삭제되는 답변에 달린 남의 리액션은 FK `ON DELETE CASCADE`로 함께 사라지고, 본인이 남에게 단 리액션(음성 리액션 S3 포함)은 선택과 무관하게 유지한다. `KEEP`은 아무것도 지우지 않는다. `docs/tasks/account.md`의 "텍스트·리액션·음성 모두 삭제" 문구보다 이 결정이 우선한다. 콘텐츠 선택이 없는 과거 탈퇴 데이터는 `KEEP`처럼 다룬다.
+- **구현 위치(PR 2)**: `domain/account/purge`(`AccountPurgeService` 클레임·S3 삭제, `AccountPurgeTransaction` DB 한 트랜잭션, `AccountPurgeJob` 04:00 KST), `domain/account/apple`(`AppleRevocationService` 큐 처리·백오프, `AppleRevocationJob` 5분 주기).
 
 ## 6. Apple 해지 큐 (PR 2 설계, 결정 13)
 `AppleTokenRevoker.revoke(userId)` → `DONE | SKIPPED | 예외(재시도)`. 이번 구현체는 키가 없어 `SKIPPED`를 기록한다. 5분 주기 별도 작업(ShedLock `apple-revocation`)이 `PENDING AND next_attempt_at <= now()`를 `FOR UPDATE SKIP LOCKED`로 집어 처리. 실패 시 대기 = `min(10분 × 2^(n-1), 24시간)` ±20% 지터, 8회 후 `FAILED`. 파기는 큐에 넣기만 하므로 해지 실패가 파기를 막지 않는다. Apple 토큰 자체는 현재 저장하지 않아 실제 연결 시 암호화 컬럼이 필요하다(범위 밖).

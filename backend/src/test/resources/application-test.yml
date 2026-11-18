@@ -24,6 +24,8 @@ aws:
     use-static-credentials: true
 
 ieum:
+  account:
+    scheduling-enabled: false
   auth:
     jwt-secret: test-only-secret-0123456789-0123456789-0123456789
     social:
