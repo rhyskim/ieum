@@ -3,10 +3,10 @@
 근거: `docs/adr/0002-account-purge.md`(결정 1~13, 확정), `docs/adr/0003-group-invite.md`, 학습 노트 0003·0007(옵시디언). 이 문서는 ADR을 구현에 옮긴 방식을 적고, ADR·작업지시서와 다르게 해석한 곳을 따로 표시한다.
 
 ## PR 분할 (Root 승인)
-- **PR 1**: 계정 연결, V4 전체, 탈퇴 요청 개편(콘텐츠 선택·방장 위임·기기 토큰 삭제), 유효 멤버 단일 정의, 복구(조건부 UPDATE·상한 충돌), 모바일(복구·로그인 수단·탈퇴 화면).
+- **PR 1**: 계정 연결, V5 전체, 탈퇴 요청 개편(콘텐츠 선택·방장 위임·기기 토큰 삭제), 유효 멤버 단일 정의, 복구(조건부 UPDATE·상한 충돌), 모바일(복구·로그인 수단·탈퇴 화면).
 - **PR 2**(PR 1 머지 후): 파기 배치, Apple 해지 큐/작업. 아래 §5·§6은 PR 2의 설계다.
 
-## 1. V4 (`V4__account_withdrawal_purge.sql`, 승인됨)
+## 1. V5 (`V5__account_withdrawal_purge.sql`, 승인됨. 원래 V4였으나 notification이 먼저 머지되어 V4를 쓰므로 번호를 올림)
 - `users`: `withdraw_content_choice`(KEEP/DELETE), `purge_started_at`(파기 임대 시각), `purged_at`(익명화 완료). CHECK 두 개: 선택값 범위, 탈퇴 상태가 아니면 세 컬럼 모두 NULL. 파기 후보 부분 인덱스.
 - `user_identities`: `UNIQUE(user_id, provider)` (제공자당 1개의 최종 방어선).
 - `apple_revocations`: `user_id` UNIQUE, status `PENDING/DONE/SKIPPED/FAILED`, `attempts`, `next_attempt_at`, `last_error`. (테이블만 PR 1에서 만든다. 사용은 PR 2.)
