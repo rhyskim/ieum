@@ -152,19 +152,6 @@ class AuthRepositoryImpl implements AuthRepository {
       };
 }
 
-/// 소셜 SDK 연동 전 기본 구현. 실제 키(.env)가 없으므로 연동은 별도 작업으로 남긴다.
-class UnconfiguredSocialTokenSource implements SocialTokenSource {
-  const UnconfiguredSocialTokenSource();
-
-  @override
-  Future<String> obtainToken(SocialProvider provider, {bool forceRefresh = false}) {
-    throw const ApiException(
-      code: 'SOCIAL_SDK_NOT_CONFIGURED',
-      message: '소셜 로그인 설정이 아직 연결되지 않았습니다.',
-    );
-  }
-}
-
 @riverpod
 AuthRepository authRepository(Ref ref) => AuthRepositoryImpl(
       ref.watch(dioProvider),

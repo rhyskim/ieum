@@ -25,7 +25,7 @@ abstract interface class AuthRepository {
   Future<void> revokeSession(String sessionId);
 }
 
-/// 카카오·네이버·Apple SDK로 소셜 토큰을 받아 오는 부분. 키가 없으면 [UnconfiguredSocialTokenSource].
+/// 카카오·네이버·Apple SDK로 소셜 토큰을 받아 오는 부분. 키가 없으면 `SOCIAL_SDK_NOT_CONFIGURED`를 던진다.
 abstract interface class SocialTokenSource {
   /// 사용자가 SDK 로그인을 취소하면 [SocialLoginCancelled]를 던진다(오류가 아니다).
   /// [forceRefresh]가 true면 캐시된 토큰을 쓰지 않고 새로 발급받는다.

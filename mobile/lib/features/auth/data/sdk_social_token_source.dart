@@ -11,6 +11,9 @@ const ApiException _notConfigured = ApiException(
   message: '소셜 로그인 설정이 아직 연결되지 않았습니다.',
 );
 
+ApiException _sdkError(String name) =>
+    ApiException(code: 'SOCIAL_SDK_ERROR', message: '$name 로그인을 완료하지 못했어요. 다시 시도해 주세요.');
+
 /// 카카오 SDK가 사용자 취소를 알리는 방식(`ClientErrorCause.cancelled`, 또는 `PlatformException` CANCELED)인지 판별한다.
 bool isKakaoCancel(Object error) {
   if (error is KakaoClientException) return error.reason == ClientErrorCause.cancelled;
@@ -55,7 +58,7 @@ class SdkSocialTokenSource implements SocialTokenSource {
     } on Object catch (e) {
       if (isKakaoCancel(e)) throw const SocialLoginCancelled();
       // 카카오톡 로그인 중 취소는 PlatformException으로 올 수 있으나 위에서 처리했다. 그 밖은 계정 로그인으로 한 번 더 시도하지 않는다.
-      throw const ApiException(code: 'SOCIAL_SDK_ERROR', message: '카카오 로그인을 완료하지 못했어요. 다시 시도해 주세요.');
+      throw _sdkError('카카오');
     }
   }
 
@@ -80,8 +83,10 @@ class SdkSocialTokenSource implements SocialTokenSource {
     );
     if (!ok) {
       if (cancelled) throw const SocialLoginCancelled();
-      throw const ApiException(code: 'SOCIAL_SDK_ERROR', message: '네이버 로그인을 완료하지 못했어요. 다시 시도해 주세요.');
+      throw _sdkError('네이버');
     }
-    return NaverLoginSDK.getAccessToken();
+    final String token = await NaverLoginSDK.getAccessToken();
+    if (token.isEmpty) throw _sdkError('네이버');
+    return token;
   }
 }
