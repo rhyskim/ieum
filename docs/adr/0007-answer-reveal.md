@@ -18,3 +18,4 @@
 
 ## 결과·후속 작업
 작업지시서 `docs/tasks/answer.md`(질문 배정 머지 후 착수). 스키마 변경 필요한 컬럼 보정은 Worker가 보고하고 오너 승인 후 반영한다.
+9. **락 순서(Worker 제안, Root 승인, 2026-11-19)**: 전역 순서는 users → family_groups(id 오름차순) → daily_questions(id 오름차순)이다. 답변 INSERT의 FK 검사는 users·group·dq 행에 `FOR KEY SHARE`를 걸어 `FOR UPDATE`와 충돌하므로, 저장은 users(본인) `FOR SHARE` → group `FOR SHARE` → dq `FOR UPDATE` 순으로 잡는다. leave/remove는 기존 group `FOR UPDATE` 뒤에 LOCKED dq를 id 오름차순으로 잠가 재평가한다. withdraw는 기존 owned-그룹 루프 뒤에 내 ACTIVE 그룹의 dq만 잠가 재평가하고 group 락은 새로 잡지 않는다. 재평가를 커밋 후 별도 트랜잭션으로 빼는 방식은 크래시 시 공개가 누락될 수 있어 채택하지 않는다. TIMEOUT에서 ALL로 승격하지 않는다(단방향).
