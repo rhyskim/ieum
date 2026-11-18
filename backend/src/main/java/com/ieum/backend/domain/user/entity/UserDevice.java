@@ -24,7 +24,7 @@ import lombok.NoArgsConstructor;
 @Table(
     name = "user_devices",
     uniqueConstraints = {
-        @UniqueConstraint(name = "uq_user_fcm_token", columnNames = {"user_id", "fcm_token"})
+        @UniqueConstraint(name = "uq_fcm_token", columnNames = {"fcm_token"})
     }
 )
 @NoArgsConstructor(access = AccessLevel.PROTECTED)

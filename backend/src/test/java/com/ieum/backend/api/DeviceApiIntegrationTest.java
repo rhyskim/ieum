@@ -120,22 +120,51 @@ class DeviceApiIntegrationTest {
     }
 
     @Test
-    @DisplayName("로그아웃은 요청한 본인의 해당 토큰만 해제하고, 다른 사용자의 같은 토큰 행은 지우지 않는다")
+    @DisplayName("같은 기기에서 다른 계정이 등록하면 토큰 소유가 이전되어 이전 계정 행은 사라진다(ADR-0004)")
+    void registeringSameTokenTransfersOwnership() throws Exception {
+        UUID mom = newUser("device-mom");
+        UUID daughter = newUser("device-daughter");
+        String token = "tok-" + UUID.randomUUID();
+
+        register(mom, token, "ANDROID").andExpect(status().isOk());
+        register(daughter, token, "IOS").andExpect(status().isOk());
+
+        assertThat(jdbc.queryForObject(
+            "select count(*) from user_devices where fcm_token = ?", Integer.class, token)).isEqualTo(1);
+        assertThat(deviceRows(daughter, token)).isEqualTo(1);
+        assertThat(deviceRows(mom, token)).isZero();
+    }
+
+    @Test
+    @DisplayName("DB 제약 UNIQUE(fcm_token)이 최종 방어선이다: 같은 토큰을 다른 사용자 행으로 직접 넣을 수 없다")
+    void databaseRejectsSameTokenForTwoUsers() {
+        UUID a = newUser("device-uq-a");
+        UUID b = newUser("device-uq-b");
+        String token = "tok-" + UUID.randomUUID();
+        String sql = "insert into user_devices (user_id, fcm_token, device_os) values (?, ?, 'ANDROID')";
+        jdbc.update(sql, a, token);
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> jdbc.update(sql, b, token))
+            .isInstanceOf(org.springframework.dao.DuplicateKeyException.class);
+    }
+
+    @Test
+    @DisplayName("로그아웃은 본인 소유의 해당 토큰만 해제하고, 소유가 이전된 토큰이나 다른 기기는 건드리지 않는다")
     void logoutReleasesOnlyOwnToken() throws Exception {
         UUID owner = newUser("device-c");
         UUID other = newUser("device-d");
         String token = "tok-" + UUID.randomUUID();
         String keep = "tok-" + UUID.randomUUID();
+        String moved = "tok-" + UUID.randomUUID();
         register(owner, token, "ANDROID").andExpect(status().isOk());
         register(owner, keep, "IOS").andExpect(status().isOk());
-        register(other, token, "ANDROID").andExpect(status().isOk());
+        register(owner, moved, "ANDROID").andExpect(status().isOk());
+        register(other, moved, "ANDROID").andExpect(status().isOk()); // moved는 other 소유가 됨
 
-        // other가 로그아웃하며 token을 해제해도 owner의 행은 그대로다
-        logout(other, "{\"refreshToken\":\"none\",\"fcmToken\":\"" + token + "\"}");
-        assertThat(deviceRows(other, token)).isZero();
-        assertThat(deviceRows(owner, token)).isEqualTo(1);
+        // owner가 옛 기기 토큰(moved)으로 로그아웃을 요청해도 새 소유자(other)의 행은 그대로다
+        logout(owner, "{\"refreshToken\":\"none\",\"fcmToken\":\"" + moved + "\"}");
+        assertThat(deviceRows(other, moved)).isEqualTo(1);
 
-        // owner 로그아웃은 해당 기기 토큰만 지운다(다른 기기는 유지)
+        // 본인 기기 로그아웃은 해당 토큰만 지운다(같은 계정의 다른 기기는 유지)
         logout(owner, "{\"refreshToken\":\"none\",\"fcmToken\":\"" + token + "\"}");
         assertThat(deviceRows(owner, token)).isZero();
         assertThat(deviceRows(owner, keep)).isEqualTo(1);
