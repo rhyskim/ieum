@@ -36,11 +36,12 @@ public class AccountPurgeTransaction {
      */
     @Transactional
     public boolean finalizeUser(UUID userId, boolean deleteContent) {
-        // 1) 혼자 남은 그룹 해산(JPA). 그룹을 id 오름차순으로 잠근 뒤 users 행은 마지막에 갱신한다. 이 순서는 탈퇴·복구
+        // 1) 그룹 정리(JPA): 방장이면 유효 멤버에게 위임, 혼자 남은 그룹은 해산. 그룹을 id 오름차순으로 잠근 뒤
+        //    users 행은 마지막에 갱신한다. 이 순서는 탈퇴·복구
         //    (users 행 → 그룹)와 반대지만, 파기 대상(31일 경과, purge_started_at 있음)은 복구 UPDATE가 행에 닿지 못하고
         //    탈퇴 요청은 이미 탈퇴한 계정에서 아무것도 하지 않으므로 같은 사용자를 두고 교착이 생기지 않는다.
         //    JPA가 읽은 group_members가 뒤의 JDBC 익명화를 덮어쓰지 않도록 변경을 반영하고 영속성 컨텍스트를 비운다.
-        membershipService.dissolveGroupsLeftEmptyByPurge(userId);
+        membershipService.settleGroupsOnPurge(userId);
         em.flush();
         em.clear();
 

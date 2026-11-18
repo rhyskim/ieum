@@ -23,6 +23,7 @@ import com.ieum.backend.domain.auth.social.AppleTokenVerifier;
 import com.ieum.backend.domain.auth.social.KakaoTokenVerifier;
 import com.ieum.backend.domain.auth.social.NaverTokenVerifier;
 import com.ieum.backend.domain.auth.social.SocialProfile;
+import com.ieum.backend.domain.common.enums.ContentChoice;
 import com.ieum.backend.domain.common.enums.MemberRole;
 import com.ieum.backend.domain.common.enums.OAuthProvider;
 import com.ieum.backend.domain.user.entity.User;
@@ -508,6 +509,65 @@ class AccountPurgeIntegrationTest {
             .isEqualTo("ACTIVE");
         assertThat(jdbc.queryForObject("select status from family_groups where id = ?", String.class, groupId))
             .isEqualTo("ACTIVE");
+    }
+
+    @Test
+    @DisplayName("방장이 파기될 때 그룹에 유효 멤버가 있으면 가장 오래된 유효 멤버에게 위임하고 그룹은 유지된다: M 탈퇴 → O 탈퇴 → M 복구 → O 파기(ADR 결정 15)")
+    void purgedOwnerDelegatesToOldestValidMember() {
+        UUID owner = newUser("방장O");
+        UUID groupId = newGroup(owner);
+        UUID member = addValidMember(groupId);
+        UUID newerMember = addValidMember(groupId);
+        jdbc.update("update group_members set joined_at = now() - interval '50 days' where group_id = ? and user_id = ?",
+            groupId, member);
+        jdbc.update("update group_members set joined_at = now() - interval '10 days' where group_id = ? and user_id = ?",
+            groupId, newerMember);
+
+        // 재현 순서: 멤버들이 먼저 탈퇴 → O 탈퇴(유효 후보가 없어 방장 행이 그대로 남는다) → 멤버 복구 → O 파기
+        accountService.withdraw(member, ContentChoice.KEEP);
+        accountService.withdraw(newerMember, ContentChoice.KEEP);
+        accountService.withdraw(owner, ContentChoice.KEEP);
+        // 유효 후보가 없었으므로 탈퇴 시점에는 방장 행이 그대로다(PR 1 규칙).
+        assertThat(isOwnerOf(groupId, owner)).isTrue();
+
+        // 시간 경과: O는 31일 넘게 지났고, 멤버들은 유예(30일) 안에 복구한다.
+        jdbc.update("update users set deleted_at = now() - interval '35 days' where id = ?", owner);
+        jdbc.update("update users set deleted_at = now() - interval '10 days' where id in (?, ?)", member, newerMember);
+        accountService.restore(member);
+        accountService.restore(newerMember);
+
+        assertThat(purgeService.purgeOne(owner)).isEqualTo(Outcome.PURGED);
+
+        // 가장 오래된 유효 멤버(가입 일시 순)에게 위임, 그룹은 유지, 해산·LEFT 정리 없음
+        assertThat(isOwnerOf(groupId, member)).isTrue();
+        assertThat(isOwnerOf(groupId, newerMember)).isFalse();
+        assertThat(isOwnerOf(groupId, owner)).isFalse();
+        assertThat(jdbc.queryForObject("select status from family_groups where id = ?", String.class, groupId))
+            .isEqualTo("ACTIVE");
+        assertThat(count("select count(*) from group_members where group_id = ? and is_owner and status = 'ACTIVE'",
+            groupId)).isEqualTo(1);
+        assertThat(jdbc.queryForObject(
+            "select status from group_members where group_id = ? and user_id = ?", String.class, groupId, member))
+            .isEqualTo("ACTIVE");
+    }
+
+    @Test
+    @DisplayName("방장이 파기될 때 유효 멤버가 없고 파기되지 않은 멤버도 없으면 기존 해산 규칙대로 그룹이 해산된다")
+    void purgedOwnerWithNoValidMemberDissolvesGroup() {
+        UUID owner = withdrawnUser(35, "KEEP");
+        UUID groupId = newGroup(owner);
+
+        assertThat(purgeService.purgeOne(owner)).isEqualTo(Outcome.PURGED);
+
+        assertThat(jdbc.queryForObject("select status from family_groups where id = ?", String.class, groupId))
+            .isEqualTo("ARCHIVED");
+        assertThat(count("select count(*) from group_members where group_id = ? and (status = 'ACTIVE' or is_owner)",
+            groupId)).isZero();
+    }
+
+    private boolean isOwnerOf(UUID groupId, UUID userId) {
+        return Boolean.TRUE.equals(jdbc.queryForObject(
+            "select is_owner from group_members where group_id = ? and user_id = ?", Boolean.class, groupId, userId));
     }
 
     @Test

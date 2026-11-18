@@ -176,27 +176,45 @@ public class GroupMembershipService {
     }
 
     /**
-     * 파기 시점에 혼자 남은 그룹을 해산한다(ADR-0002 결정 8). 내 ACTIVE 그룹을 id 오름차순으로 잠그고,
-     * 그룹이 ACTIVE이면서 본인을 뺀 ACTIVE 멤버 중 아직 파기되지 않은 사람이 한 명도 없을 때만 {@link #dissolve}한다.
-     * "유효 멤버"가 아니라 "파기되지 않은 멤버"로 세는 이유: 복구할 수 있는 탈퇴 유예 중 멤버(예: 아직 유예 중인 방장)가
-     * 남아 있는 그룹을, 먼저 31일이 지난 다른 사람의 파기 때문에 미리 해산하면 안 되기 때문이다.
-     * 해산할 때는 이미 파기된 방장 등 남은 ACTIVE 행도 LEFT·방장 해제로 함께 정리한다. 이미 해산된 그룹은 건드리지 않는다.
+     * 파기 시점의 그룹 정리(ADR-0002 결정 8·15). 내 ACTIVE 그룹을 id 오름차순으로 잠그고(이미 해산된 그룹은 건드리지 않는다):
+     * <ol>
+     *   <li>내가 방장이고 그룹에 유효 멤버가 있으면 가장 오래된 유효 멤버(가입 일시 → id)에게 방장을 위임한다
+     *       (후보 선정은 탈퇴 요청과 같은 {@link #ownerCandidates}). 방장이 파기된 뒤에도 방장이 없는 그룹이 남지 않게 한다.
+     *   <li>그렇지 않고 본인을 뺀 ACTIVE 멤버 중 아직 파기되지 않은 사람이 한 명도 없으면 {@link #dissolve}하고
+     *       이미 파기된 방장 등 남은 ACTIVE 행도 LEFT·방장 해제로 함께 정리한다.
+     * </ol>
+     * 해산 판정을 "유효 멤버"가 아니라 "파기되지 않은 멤버"로 세는 이유: 복구할 수 있는 탈퇴 유예 중 멤버(예: 아직 유예 중인
+     * 방장)가 남아 있는 그룹을, 먼저 31일이 지난 다른 사람의 파기 때문에 미리 해산하면 안 되기 때문이다.
      */
     @Transactional(propagation = Propagation.MANDATORY)
-    public void dissolveGroupsLeftEmptyByPurge(UUID userId) {
+    public void settleGroupsOnPurge(UUID userId) {
         Instant now = Instant.now();
         for (UUID groupId : memberRepository.findMyActiveGroupIds(userId)) {
             FamilyGroup group = lockGroup(groupId);
-            if (group.getStatus() != GroupStatus.ACTIVE
-                || memberRepository.countActiveNotPurgedExcept(groupId, userId) > 0) {
+            if (group.getStatus() != GroupStatus.ACTIVE) {
                 continue;
             }
-            memberRepository.findByGroup_IdAndUser_Id(groupId, userId)
+            // 잠근 뒤에 멤버십을 새로 읽는다.
+            GroupMember me = memberRepository.findByGroup_IdAndUser_Id(groupId, userId)
                 .filter(m -> m.getStatus() == MemberStatus.ACTIVE)
-                .ifPresent(me -> {
-                    dissolve(groupId, me, now);
-                    memberRepository.leaveAllActive(groupId, now);
-                });
+                .orElse(null);
+            if (me == null) {
+                continue;
+            }
+            if (me.isOwner()) {
+                List<GroupMember> candidates = ownerCandidates(groupId, userId);
+                if (!candidates.isEmpty()) {
+                    // 부분 유니크 인덱스(그룹당 ACTIVE 방장 1명): 이전 방장을 먼저 내리고 flush한 뒤 승계시킨다.
+                    me.changeOwner(false);
+                    memberRepository.saveAndFlush(me);
+                    candidates.get(0).changeOwner(true);
+                    continue;
+                }
+            }
+            if (memberRepository.countActiveNotPurgedExcept(groupId, userId) == 0) {
+                dissolve(groupId, me, now);
+                memberRepository.leaveAllActive(groupId, now);
+            }
         }
     }
 
