@@ -17,7 +17,7 @@
 ## 구현 루프
 1. 수용 기준 → 실패하는 테스트 작성.
 2. 최소 구현.
-3. 변경한 쪽 테스트·린트 실행: backend `./gradlew test`, mobile `flutter analyze && flutter test`. API 계약을 바꿨으면 양쪽 모두.
+3. 변경한 쪽 테스트·린트 실행: backend `./gradlew test`, mobile `flutter analyze && flutter test`. API 계약을 바꿨으면 양쪽 모두. 이 PC는 메모리가 빠듯해서(15.7GB) **Gradle은 동시에 하나만** 돌리고 `./gradlew test --no-daemon -Dorg.gradle.jvmargs=-Xmx1g`로 실행한다. 메모리 부족으로 중단되면 임의로 재실행하지 말고 Root에 보고한다.
 4. `git diff` 전체 자체 검수: 범위 밖 변경, 약해진 테스트, 하드코딩된 비밀값, 불필요한 파일이 없는지 확인.
 5. **Agy 검수**: `agy -p "<프롬프트>"`로 외부 검수를 받는다. 범위는 변경 코드의 결함, 수용 기준 누락, 테스트의 적절성(수용 기준을 실제로 검증하는지, 약하지 않은지)만이다. 기능 간 계약·전체 시나리오·통합 동작은 Root의 Codex가 맡으므로 다루지 않는다. Agy는 이 저장소의 규칙을 모르므로 프롬프트에 **작업지시서 전문, 관련 ADR, `git diff` 내용(또는 base 브랜치 대비 비교 명령), 적용할 규칙(루트 CLAUDE.md §2·§3·§5와 이 파일의 금지 항목), 출력 형식(파일:줄, 근거, 심각도)**을 직접 넣는다. 지적은 직접 검증한 뒤 반영하고, 반박한 항목은 PR 본문에 이유를 적는다.
 6. Conventional Commits(한글 subject)로 커밋한다.
