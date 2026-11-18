@@ -359,6 +359,27 @@ class AnswerRevealIntegrationTest {
     }
 
     @Test
+    @DisplayName("지연 전환은 목록뿐 아니라 오늘의 질문·질문 상세 조회가 17시 이후 첫 요청이어도 일어난다")
+    void timeoutIsAlsoTriggeredByTodayAndDetailReads() throws Exception {
+        Family viaToday = newFamily(3);
+        Family viaDetail = newFamily(3);
+        at(DAY1, 20, 0);
+        answer(viaToday, viaToday.members().get(1));
+        answer(viaDetail, viaDetail.members().get(1));
+        at(DAY1.plusDays(1), 17, 0);
+
+        MvcResult today = mockMvc.perform(get("/api/v1/groups/" + viaToday.groupId() + "/questions/today")
+                .header("Authorization", bearer(viaToday.members().get(0))))
+            .andExpect(status().isOk()).andReturn();
+        assertThat(body(today).path("data").path("revealStatus").asText()).isEqualTo("REVEALED_TIMEOUT");
+        assertThat(dbStatus(viaToday)).isEqualTo("REVEALED_TIMEOUT");
+
+        JsonNode detail = objectMapper.readTree(detailRaw(viaDetail, viaDetail.members().get(0))).path("data");
+        assertThat(detail.path("revealStatus").asText()).isEqualTo("REVEALED_TIMEOUT");
+        assertThat(dbStatus(viaDetail)).isEqualTo("REVEALED_TIMEOUT");
+    }
+
+    @Test
     @DisplayName("17시가 지나도 아무도 답하지 않았으면 LOCKED로 남고, 이후 첫 답변이 들어오면 즉시 REVEALED_TIMEOUT이 된다")
     void zeroAnswersStayLockedThenFirstAnswerRevealsImmediately() throws Exception {
         Family f = newFamily(3);

@@ -74,7 +74,9 @@ class _BoardBody extends StatelessWidget {
       children: <Widget>[
         Text(detail.questionText, style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
         const SizedBox(height: 16),
-        _RevealNotice(status: detail.revealStatus, iAnswered: detail.hasAnswered),
+        // 상세와 목록은 순차 호출이라 17시 경계에서 상태가 달라질 수 있다. 나중에 받은 목록의 상태가 최신이며,
+        // 아래에 보이는 답변 목록과 같은 시점의 값이라 안내와 목록이 어긋나지 않는다.
+        _RevealNotice(status: board.answers.revealStatus, iAnswered: board.answers.hasAnswered),
         const SizedBox(height: 16),
         LargeButton(
           label: detail.hasAnswered ? '내 답변 고치기' : '답변하기',
