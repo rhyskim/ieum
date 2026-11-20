@@ -95,7 +95,7 @@ for-family/
 
 ---
 
-## 5. 로컬 실행 방법 (Quick Start — Placeholder)
+## 5. 로컬 실행 방법 (Quick Start)
 
 ### 5.1 로컬 인프라 실행 (Docker)
 ```bash
