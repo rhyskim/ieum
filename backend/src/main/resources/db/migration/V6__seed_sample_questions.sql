@@ -1,4 +1,4 @@
--- ADR-0006: 개발용 샘플 질문 30개. 오너가 쓴 실제 질문은 CSV에서 만든 새 버전 마이그레이션으로 추가한다(이 파일은 수정하지 않는다).
+-- ADR-0006: 개발용 샘플 질문 30개. 실제 질문은 CSV에서 만든 새 버전 마이그레이션으로 추가한다(이 파일은 수정하지 않는다).
 -- sequence_order는 1부터 연속이며, 이후 적재분은 31부터 이어 붙인다.
 INSERT INTO questions (sequence_order, category, question_text, tts_guide_text, follow_up_hint) VALUES
 (1, 'MEMORY', '어릴 적 가장 좋아했던 놀이는 무엇인가요?', NULL, '누구와 함께 했는지 떠올려 보세요.'),

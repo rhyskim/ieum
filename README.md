@@ -119,9 +119,18 @@ flutter run
 
 ---
 
-## 6. 관련 문서 링크
+## 6. 개발 방식 (AI 협업)
+이 프로젝트는 AI 코딩 도구(Claude Code)와 협업해 만들었습니다. 설계 결정은 사람이 내리고, AI는 구현·검토·교차 검증을 맡습니다.
+- **역할 분리**: 설계·통합을 맡는 Root 세션과, 기능 하나(브랜치 1개 = PR 1개)를 구현하는 Worker 세션을 나눕니다. 규칙은 [CLAUDE.md](./CLAUDE.md)와 [.worktrees/CLAUDE.md](./.worktrees/CLAUDE.md)에 있습니다.
+- **ADR 기반 의사결정**: 인증, 동시성, 비동기 처리처럼 핵심 로직은 구현 전에 흐름·데이터 구조·실패 조건을 따져 [docs/adr](./docs/adr)에 결정과 트레이드오프를 기록합니다.
+- **테스트 우선과 교차 검증**: 수용 기준을 테스트로 먼저 정의하고(동시성 경쟁은 실패를 먼저 재현), 구현 검수와 통합 검증을 서로 다른 도구로 나눠 수행한 뒤 PR로 병합합니다. 작업지시서는 [docs/tasks](./docs/tasks)에 있습니다.
+
+---
+
+## 7. 관련 문서 링크
 - [CLAUDE.md](./CLAUDE.md) — 코딩 컨벤션, 아키텍처 원칙 및 AI 협업 가이드
 - [PLAN.md](./PLAN.md) — 단계별 마일스톤 및 개발 체크리스트
+- [docs/adr](./docs/adr) — 설계 결정 기록(ADR)
 - [docs/PRD.md](./docs/PRD.md) — 제품 요구사항 정의서
 - [docs/DATA_MODEL.md](./docs/DATA_MODEL.md) — 데이터베이스 스키마 및 스토리지 명세
 - [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md) — 시스템 아키텍처 및 상세 기술 설계

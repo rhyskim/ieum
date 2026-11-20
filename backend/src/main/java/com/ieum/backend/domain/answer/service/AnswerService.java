@@ -26,7 +26,7 @@ public class AnswerService {
     /** 공백 제외 최소 글자 수(수정도 동일). */
     public static final int MIN_TEXT_LENGTH = 30;
 
-    /** 공백 포함 최대 글자 수(오너 확정). 초과는 INVALID_INPUT(400)으로 거절한다. */
+    /** 공백 포함 최대 글자 수(ADR-0007). 초과는 INVALID_INPUT(400)으로 거절한다. */
     public static final int MAX_TEXT_LENGTH = 2000;
 
     private final DailyQuestionRepository dailyQuestionRepository;

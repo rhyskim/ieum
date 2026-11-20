@@ -2,7 +2,7 @@
 
 - 브랜치: `feat/notification` / worktree: `.worktrees/notification`
 - 대상: backend + mobile
-- 선행: `group-core`(알림 포트 `GroupNotifier`가 있어야 함). 외부 준비: Firebase 프로젝트와 `google-services.json`/서비스 계정 키는 오너가 만든다(커밋 금지).
+- 선행: `group-core`(알림 포트 `GroupNotifier`가 있어야 함). 외부 준비: Firebase 프로젝트와 `google-services.json`/서비스 계정 키는 개발자가 만든다(커밋 금지).
 
 ## 목표
 FCM 푸시를 보낼 수 있는 기반을 만들고, 방장에게 입장 요청이 왔을 때와 요청자에게 승인·거절 결과를 알린다.

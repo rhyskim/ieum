@@ -4,7 +4,7 @@ import 'package:ieum_mobile/core/network/api_exception.dart';
 import 'package:ieum_mobile/features/group/data/group_repository_impl.dart';
 import 'package:ieum_mobile/features/group/presentation/group_widgets.dart';
 
-/// 인원 상한(20명)에 닿았을 때 관리자에게 보내는 문의. 서버는 저장까지만 하고 오너가 직접 확인한다.
+/// 인원 상한(20명)에 닿았을 때 관리자에게 보내는 문의. 서버는 저장까지만 하고 운영자가 직접 확인한다.
 class SupportScreen extends ConsumerStatefulWidget {
   const SupportScreen({required this.groupId, super.key});
 
