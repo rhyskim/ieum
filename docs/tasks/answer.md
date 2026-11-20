@@ -28,4 +28,4 @@
 - [ ] 비멤버·탈퇴 유예 사용자는 조회·저장이 거절된다.
 
 ## 관련 ADR·문서
-`docs/adr/0007-answer-reveal.md`, `docs/adr/0006-question-assignment.md`, `docs/adr/0002-account-purge.md`, 학습 노트 0009 Part C
+`docs/adr/0007-answer-reveal.md`, `docs/adr/0006-question-assignment.md`, `docs/adr/0002-account-purge.md`

@@ -32,7 +32,7 @@ cd mobile && flutter run --dart-define-from-file=dart_defines.local.json
 
 네이버는 서버에 키가 필요 없다(프로필 API 응답으로 유효성만 확인).
 
-## 오너가 콘솔에서 할 일
+## 개발자가 콘솔에서 할 일
 - 카카오 디벨로퍼스: 앱 생성 → 네이티브 앱 키 발급, Android 플랫폼에 패키지명 `com.ieum.app`과 키 해시 등록, 카카오 로그인 활성화. (서버용 `KAKAO_APP_ID`는 앱 ID)
 - 네이버 개발자센터: 애플리케이션 등록 → Client ID/Secret, Android 환경에 패키지명 `com.ieum.app` 추가. 검수 승인 전에는 등록한 테스트 계정만 로그인된다(ADR-0005).
 - Apple은 이번 범위 밖(iOS 출시 시).

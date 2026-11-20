@@ -2,7 +2,7 @@
 
 - 브랜치: `feat/social-login` / worktree: `.worktrees/social-login`
 - 대상: mobile 중심 + backend 소폭(설정·오류 구분)
-- 선행: auth(머지됨). 외부 준비: 카카오·네이버 앱 등록과 키 발급은 **오너가 한다**(키는 커밋 금지).
+- 선행: auth(머지됨). 외부 준비: 카카오·네이버 앱 등록과 키 발급은 **개발자가 직접 한다**(키는 커밋 금지).
 
 ## 목표
 앱에서 카카오·네이버 로그인으로 실제 JWT를 받아 로그인·복구·로그인 수단 연결이 동작하게 한다.
@@ -24,4 +24,4 @@ Apple 로그인 앱 연동(iOS 출시 시), 실제 상용 키 등록, 소셜 프
 - [ ] 키가 없는 환경에서도 앱이 기동하고 로그인 버튼이 명확한 안내를 보인다.
 
 ## 관련 ADR·문서
-`docs/adr/0005-social-login.md`, `docs/adr/0001-auth-jwt.md`, 학습 노트 0008 Part A
+`docs/adr/0005-social-login.md`, `docs/adr/0001-auth-jwt.md`

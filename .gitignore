@@ -93,3 +93,14 @@ mobile/ios/ServiceDefinitions.json
 
 # 로컬 소셜 로그인 키(--dart-define-from-file). 커밋 금지
 mobile/dart_defines.local.json
+
+# 참고 이미지(저작권이 있는 외부 자료), 에디터·AI 도구 로컬 설정, 비공개 메모
+image/
+.vscode/
+.claude/
+.codex/
+.agy/
+docs/private/
+*.local.json
+dart_defines*.json
+*.log

@@ -19,7 +19,7 @@ Backend (모든 API는 `groupId` 컨텍스트와 `@GroupMemberOnly`/방장 검�
 - 호칭: `member_aliases(group_id, viewer, target, alias)`, 조회·설정 API. 호칭이 없으면 상대가 입장 때 정한 이름을 쓴다.
 - 상한 도달 시 관리자 연락: 메시지를 `support_requests`에 저장하는 API(전달은 DB 저장까지).
 - 방장에게 입장 요청이 오면 알림 포트(`GroupNotifier` 인터페이스)를 호출한다. 구현체는 이번엔 로그 전용이고 FCM은 `notification` 작업.
-- Flyway `V3`(오너 승인 필요): 활성 코드 부분 유니크 인덱스, `member_aliases`, `group_members`에 방장 표시·`PENDING`/`REMOVED` 상태, 입장 시도 상태, `security_events`, `support_requests`.
+- Flyway `V3`(승인됨): 활성 코드 부분 유니크 인덱스, `member_aliases`, `group_members`에 방장 표시·`PENDING`/`REMOVED` 상태, 입장 시도 상태, `security_events`, `support_requests`.
 
 Mobile
 - 그룹 목록/전환, 그룹 만들기, 코드 보기(큰 숫자, 남은 시간, 새로 만들기, 공유 시트로 코드 전달), 코드 입력(숫자 키패드), 승인 대기 화면("방장이 확인하고 있어요" 등 친절한 문구), 방장의 승인 대기 목록, 멤버·호칭 편집, 상한 도달 시 관리자 문의 화면. 접근성 규칙(루트 CLAUDE.md §5) 준수.
@@ -40,7 +40,7 @@ Mobile
 - [ ] 승인 대기는 2일 후 만료 처리되며 만료된 요청은 승인할 수 없다.
 - [ ] 모바일: 코드 입력/잠금/승인 대기/상한 도달 화면 위젯 테스트(한글 라벨, 56dp).
 
-## 오너 확정 (2026-11-17)
+## 확정 사항 (2026-11-17)
 - 입장 시도 제한 저장소는 **PostgreSQL**(Redis 사용 안 함). 트래픽이 늘면 재검토.
 - `REMOVED`(강퇴)는 코드로 재입장 불가. 거절된 사용자는 다시 요청할 수 있다.
 - 문의 메시지는 DB 저장까지만(전달 채널 없음).
