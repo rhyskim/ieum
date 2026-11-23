@@ -9,6 +9,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.ieum.backend.domain.account.purge.AccountPurgeTransaction;
 import com.ieum.backend.domain.auth.service.AccountService;
 import com.ieum.backend.domain.common.enums.ContentChoice;
 import com.ieum.backend.domain.common.enums.EmojiCode;
@@ -99,6 +100,7 @@ class ReactionArchiveIntegrationTest {
     @Autowired private JwtProvider jwtProvider;
     @Autowired private ReactionService reactionService;
     @Autowired private AccountService accountService;
+    @Autowired private AccountPurgeTransaction purgeTransaction;
     @Autowired private GroupMembershipService membershipService;
     @Autowired private MutableClock clock;
     @PersistenceContext private EntityManager em;
@@ -349,6 +351,46 @@ class ReactionArchiveIntegrationTest {
             fu.get(30, TimeUnit.SECONDS); // 교착이면 lock_timeout(15초) 또는 여기서 실패한다
         }
         pool.shutdownNow();
+    }
+
+    @RepeatedTest(4)
+    @DisplayName("작성자 파기(답변 삭제)와 리액션 PUT이 겹쳐도 교착 없이 끝나고, 남는 리액션은 고아가 아니다")
+    void reactionDoesNotDeadlockWithAuthorPurge() throws Exception {
+        Family f = newFamily(4);
+        setStatus(f.dqId(), "REVEALED_ALL");
+        UUID author = f.members().get(3);
+        UUID target = insertAnswer(f.groupId(), f.dqId(), author, "파기될 작성자의 답변");
+        jdbc.update("update users set deleted_at = now() - interval '31 days', purge_started_at = now() where id = ?", author);
+
+        ExecutorService pool = Executors.newFixedThreadPool(3);
+        CountDownLatch start = new CountDownLatch(1);
+        List<Future<?>> futures = new ArrayList<>();
+        for (UUID reactor : List.of(f.members().get(1), f.members().get(2))) {
+            futures.add(pool.submit(() -> {
+                start.await();
+                for (int i = 0; i < 20; i++) {
+                    try {
+                        reactionService.add(f.groupId(), target, reactor, EmojiCode.values()[i % 5]);
+                    } catch (com.ieum.backend.global.exception.BusinessException e) {
+                        assertThat(e.getErrorCode()).isEqualTo(com.ieum.backend.global.exception.ErrorCode.RESOURCE_NOT_FOUND);
+                    }
+                }
+                return null;
+            }));
+        }
+        futures.add(pool.submit(() -> {
+            start.await();
+            return purgeTransaction.finalizeUser(author, true);
+        }));
+        start.countDown();
+        for (Future<?> fu : futures) {
+            fu.get(30, TimeUnit.SECONDS); // 교착이면 lock_timeout(15초) 또는 여기서 실패한다
+        }
+        pool.shutdownNow();
+
+        assertThat(jdbc.queryForObject("select count(*) from answers where id = ?", Integer.class, target)).isZero();
+        assertThat(jdbc.queryForObject("select count(*) from answer_reactions where answer_id = ?", Integer.class, target))
+            .as("답변이 지워지면 달린 리액션도 함께 사라진다").isZero();
     }
 
     // ---------- 리액션: 서버 권한 ----------
