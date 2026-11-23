@@ -218,7 +218,7 @@ class _AnswerCard extends StatelessWidget {
             Text(text, style: const TextStyle(fontSize: 18)),
             if (showReactions) ...<Widget>[
               const SizedBox(height: 12),
-              ReactionBar(groupId: groupId, answerId: answerId),
+              ReactionBar(key: ValueKey<String>(answerId), groupId: groupId, answerId: answerId),
             ],
           ],
         ),

@@ -292,6 +292,17 @@ class ReactionArchiveIntegrationTest {
     }
 
     @Test
+    @DisplayName("DELETE도 PUT과 같은 열람 권한을 확인해, 공개 전·열람 불가 답변의 집계를 내려주지 않는다")
+    void deleteChecksVisibilityToo() throws Exception {
+        Family f = newFamily(3);
+        UUID locked = insertAnswer(f.groupId(), f.dqId(), f.owner(), "잠긴 답변");
+        MvcResult r = react("DELETE", f.groupId(), locked, f.members().get(1), "LOVE");
+        assertThat(r.getResponse().getStatus()).isEqualTo(403);
+        assertThat(body(r).path("code").asText()).isEqualTo("ANSWER_NOT_VISIBLE");
+        assertThat(r.getResponse().getContentAsString(StandardCharsets.UTF_8)).doesNotContain("reactions");
+    }
+
+    @Test
     @DisplayName("알 수 없는 이모지는 400이다")
     void unknownEmojiRejected() throws Exception {
         Family f = newFamily(2);
@@ -530,7 +541,9 @@ class ReactionArchiveIntegrationTest {
     @DisplayName("잘못된 커서·페이지 크기는 400이다")
     void invalidCursorAndSize() throws Exception {
         Family f = newFamily(2);
-        for (String q : List.of("?cursor=not-a-cursor", "?size=0", "?size=1000")) {
+        String trailing = java.util.Base64.getUrlEncoder().withoutPadding()
+            .encodeToString(("2026-11-19|" + UUID.randomUUID() + "|").getBytes(StandardCharsets.UTF_8));
+        for (String q : List.of("?cursor=not-a-cursor", "?cursor=" + trailing, "?size=0", "?size=1000")) {
             assertThat(mockMvc.perform(get("/api/v1/groups/" + f.groupId() + "/archive" + q)
                     .header("Authorization", bearer(f.owner()))).andReturn().getResponse().getStatus())
                 .as(q).isEqualTo(400);
@@ -546,8 +559,7 @@ class ReactionArchiveIntegrationTest {
 
         String raw = archiveRaw(f.groupId(), f.members().get(0));
         assertThat(raw).doesNotContain("비밀 본문").contains("내 본문입니다");
-        JsonNode item = body(mockMvc.perform(get("/api/v1/groups/" + f.groupId() + "/archive/" + f.dqId())
-            .header("Authorization", bearer(f.members().get(0)))).andReturn()).path("data");
+        JsonNode item = archive(f.groupId(), f.members().get(0), "").path("items").get(0);
         assertThat(item.path("revealStatus").asText()).isEqualTo("LOCKED");
         assertThat(item.path("hasAnswered").asBoolean()).isTrue();
         assertThat(item.path("answers")).hasSize(1);

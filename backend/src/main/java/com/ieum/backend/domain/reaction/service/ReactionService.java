@@ -69,10 +69,13 @@ public class ReactionService {
         return summary(answerId, userId);
     }
 
-    /** 취소는 없으면 0행이라 그대로 성공한다. 멤버 여부는 컨트롤러가, 답변이 이 그룹 것인지는 여기서 확인한다. */
+    /**
+     * 취소는 없으면 0행이라 그대로 성공한다. 응답에 집계가 담기므로 달기와 같은 열람 권한을 확인한다.
+     * 멤버 여부는 컨트롤러가 확인하고, 삭제는 새 FK 락을 걸지 않아 lockMember는 생략한다.
+     */
     @Transactional
     public ReactionSummary remove(UUID groupId, UUID answerId, UUID userId, EmojiCode emoji) {
-        findAnswer(groupId, answerId);
+        requireVisible(findAnswer(groupId, answerId), userId);
         reactionRepository.deleteEmoji(answerId, userId, emoji);
         return summary(answerId, userId);
     }
@@ -143,10 +146,11 @@ public class ReactionService {
 
     /** 공개 전(LOCKED)이면 본인 답변이어도 거절한다. 그 외에는 답변 본문 열람 규칙과 같다. */
     private void requireVisible(Answer answer, UUID viewerId) {
+        // 지연 전환의 벌크 UPDATE가 영속성 컨텍스트를 비우므로 식별자는 그 전에 꺼내 둔다.
         UUID dqId = answer.getDailyQuestion().getId();
+        boolean mine = answer.getUser().getId().equals(viewerId);
         RevealStatus status = revealEvaluator.revealIfTimedOut(dqId, clock.instant());
         boolean viewerAnswered = answerRepository.existsByDailyQuestion_IdAndUser_Id(dqId, viewerId);
-        boolean mine = answer.getUser().getId().equals(viewerId);
         if (status == RevealStatus.LOCKED || !(mine || AnswerVisibility.canSeeOthers(status, viewerAnswered))) {
             throw new BusinessException(ErrorCode.ANSWER_NOT_VISIBLE);
         }

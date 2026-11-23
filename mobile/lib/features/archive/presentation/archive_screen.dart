@@ -31,6 +31,7 @@ class _ArchiveScreenState extends ConsumerState<ArchiveScreen> {
   }
 
   Future<void> _loadMore() async {
+    if (_loading && _items.isNotEmpty) return;
     setState(() {
       _loading = true;
       _error = null;
@@ -44,10 +45,11 @@ class _ArchiveScreenState extends ConsumerState<ArchiveScreen> {
         _nextCursor = page.nextCursor;
         _loading = false;
       });
-    } on ApiException catch (e) {
+    } catch (e) {
+      // 예상 밖 응답 형식도 로딩에 갇히지 않고 다시 시도할 수 있게 한다.
       if (mounted) {
         setState(() {
-          _error = e.message;
+          _error = e is ApiException ? e.message : '불러오지 못했어요. 다시 시도해 주세요.';
           _loading = false;
         });
       }
@@ -109,10 +111,10 @@ class _ArchiveItemCard extends StatelessWidget {
           const SizedBox(height: 8),
           if (!opened)
             const Text('아직 답변이 열리지 않았어요.', style: TextStyle(fontSize: 18))
-          else if (!item.hasAnswered)
+          else if (item.revealStatus == RevealStatus.revealedTimeout && !item.hasAnswered)
             const Text('내 답변을 쓰면 가족의 답변을 볼 수 있어요.', style: TextStyle(fontSize: 18)),
           for (final ArchiveAnswer a in item.answers)
-            _AnswerCard(groupId: groupId, answer: a, showReactions: opened),
+            _AnswerCard(key: ValueKey<String>(a.answerId), groupId: groupId, answer: a, showReactions: opened),
         ],
       ),
     );
@@ -120,7 +122,7 @@ class _ArchiveItemCard extends StatelessWidget {
 }
 
 class _AnswerCard extends StatelessWidget {
-  const _AnswerCard({required this.groupId, required this.answer, required this.showReactions});
+  const _AnswerCard({super.key, required this.groupId, required this.answer, required this.showReactions});
 
   final String groupId;
   final ArchiveAnswer answer;
@@ -143,7 +145,7 @@ class _AnswerCard extends StatelessWidget {
             // 공개 전에는 서버가 리액션을 거절하므로 바를 두지 않는다.
             if (showReactions) ...<Widget>[
               const SizedBox(height: 12),
-              ReactionBar(groupId: groupId, answerId: answer.answerId, initial: answer.reactions),
+              ReactionBar(key: ValueKey<String>(answer.answerId), groupId: groupId, answerId: answer.answerId, initial: answer.reactions),
             ],
           ],
         ),

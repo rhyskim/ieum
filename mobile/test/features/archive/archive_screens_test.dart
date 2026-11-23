@@ -184,6 +184,23 @@ void main() {
     expect(find.textContaining('아빠 답변'), findsNothing);
   });
 
+  testWidgets('전원 공개 질문에 내가 답하지 않았어도 "내 답변을 쓰면" 안내는 시간 초과 공개에서만 보인다', (tester) async {
+    final FakeArchiveRepository repo = FakeArchiveRepository(
+      pages: <ArchivePage>[
+        ArchivePage(
+          items: <ArchiveItem>[
+            _item('q2', DateTime(2026, 11, 20), answered: false),
+            _item('q1', DateTime(2026, 11, 19), status: RevealStatus.revealedTimeout, answered: false),
+          ],
+          nextCursor: null,
+        ),
+      ],
+    );
+    await tester.pumpWidget(_app(repo));
+    await tester.pumpAndSettle();
+    expect(find.text('내 답변을 쓰면 가족의 답변을 볼 수 있어요.'), findsOneWidget);
+  });
+
   testWidgets('"더 보기"는 서버가 준 커서로 다음 페이지를 이어 붙인다', (tester) async {
     final FakeArchiveRepository repo = FakeArchiveRepository(
       pages: <ArchivePage>[

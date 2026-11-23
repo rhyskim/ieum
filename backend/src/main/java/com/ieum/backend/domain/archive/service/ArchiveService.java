@@ -71,25 +71,19 @@ public class ArchiveService {
         return new ArchivePage(build(groupId, viewerId, page), nextCursor);
     }
 
-    @Transactional
-    public ArchiveItem item(UUID groupId, UUID dailyQuestionId, UUID viewerId) {
-        DailyQuestion dq = dailyQuestionRepository.findByIdAndGroup_Id(dailyQuestionId, groupId)
-            .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND));
-        return build(groupId, viewerId, List.of(dq)).get(0);
-    }
-
     private List<ArchiveItem> build(UUID groupId, UUID viewerId, List<DailyQuestion> page) {
         if (page.isEmpty()) {
             return List.of();
         }
         // 1) 공개 상태: LOCKED인 질문만 지연 전환(조건부 UPDATE)을 시도한다. 벌크 UPDATE가 영속성 컨텍스트를 비우므로
         //    질문·본문 정보는 먼저 값으로 꺼내 둔다.
+        //    전환 UPDATE는 행 락을 커밋까지 쥐므로 daily_questions는 id 오름차순으로 잠근다(ADR-0007 결정 9).
+        Map<UUID, RevealStatus> switched = new HashMap<>();
+        page.stream().filter(d -> d.getRevealStatus() == RevealStatus.LOCKED).map(DailyQuestion::getId).sorted()
+            .forEach(id -> switched.put(id, revealEvaluator.revealIfTimedOut(id, clock.instant())));
         Map<UUID, RevealStatus> statuses = new LinkedHashMap<>();
         for (DailyQuestion d : page) {
-            RevealStatus s = d.getRevealStatus() == RevealStatus.LOCKED
-                ? revealEvaluator.revealIfTimedOut(d.getId(), clock.instant())
-                : d.getRevealStatus();
-            statuses.put(d.getId(), s);
+            statuses.put(d.getId(), switched.getOrDefault(d.getId(), d.getRevealStatus()));
         }
         List<UUID> dqIds = new ArrayList<>(statuses.keySet());
 
@@ -139,7 +133,7 @@ public class ArchiveService {
         static Cursor decode(String cursor) {
             try {
                 String raw = new String(Base64.getUrlDecoder().decode(cursor), StandardCharsets.UTF_8);
-                String[] parts = raw.split("\\|");
+                String[] parts = raw.split("\\|", -1);
                 if (parts.length != 2) {
                     throw new IllegalArgumentException();
                 }

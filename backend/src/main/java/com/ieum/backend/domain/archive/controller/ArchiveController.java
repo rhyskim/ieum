@@ -1,6 +1,5 @@
 package com.ieum.backend.domain.archive.controller;
 
-import com.ieum.backend.domain.archive.dto.ArchiveDtos.ArchiveItem;
 import com.ieum.backend.domain.archive.dto.ArchiveDtos.ArchivePage;
 import com.ieum.backend.domain.archive.service.ArchiveService;
 import com.ieum.backend.global.common.ApiResponse;
@@ -32,16 +31,5 @@ public class ArchiveController {
         @RequestParam(required = false) Integer size
     ) {
         return ApiResponse.ok(archiveService.timeline(groupId, user.userId(), cursor, size));
-    }
-
-    /** 한 질문의 답변과 리액션 집계(타임라인 항목과 같은 모양). */
-    @GetMapping("/{dailyQuestionId}")
-    @GroupMemberOnly
-    public ApiResponse<ArchiveItem> item(
-        @AuthenticationPrincipal CurrentUser user,
-        @PathVariable UUID groupId,
-        @PathVariable UUID dailyQuestionId
-    ) {
-        return ApiResponse.ok(archiveService.item(groupId, dailyQuestionId, user.userId()));
     }
 }

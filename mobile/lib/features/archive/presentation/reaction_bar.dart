@@ -64,7 +64,8 @@ class _ReactionBarState extends ConsumerState<ReactionBar> {
   }
 
   Future<void> _toggle(EmojiCode emoji) async {
-    if (_pending.contains(emoji)) return;
+    // 응답이 서로 뒤바뀌어 오래된 집계가 화면을 덮지 않도록 한 번에 하나의 요청만 보낸다.
+    if (_pending.isNotEmpty) return;
     final bool mine = _reactions?[emoji]?.mine ?? false;
     final ArchiveRepository repo = ref.read(archiveRepositoryProvider);
     setState(() {
@@ -102,7 +103,7 @@ class _ReactionBarState extends ConsumerState<ReactionBar> {
               _EmojiChip(
                 emoji: emoji,
                 reaction: reactions[emoji],
-                busy: _pending.contains(emoji),
+                busy: _pending.isNotEmpty,
                 onPressed: () => _toggle(emoji),
               ),
           ],
@@ -119,12 +120,13 @@ class _ReactionBarState extends ConsumerState<ReactionBar> {
   }
 
   void _showReactors(BuildContext context) {
+    // 요청은 시트를 열 때 한 번만 보낸다(빌더는 시트가 다시 그려질 때마다 실행된다).
+    final Future<List<EmojiReactors>> future =
+        ref.read(archiveRepositoryProvider).reactors(widget.groupId, widget.answerId);
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
-      builder: (BuildContext sheetContext) => _ReactorsSheet(
-        future: ref.read(archiveRepositoryProvider).reactors(widget.groupId, widget.answerId),
-      ),
+      builder: (BuildContext sheetContext) => _ReactorsSheet(future: future),
     );
   }
 }
