@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:ieum_mobile/features/archive/presentation/archive_screen.dart';
 import 'package:ieum_mobile/features/auth/presentation/identities_screen.dart';
 import 'package:ieum_mobile/features/auth/presentation/login_screen.dart';
 import 'package:ieum_mobile/features/auth/presentation/restore_screen.dart';
@@ -83,6 +84,11 @@ GoRouter appRouter(Ref ref) {
                 path: 'requests',
                 builder: (context, state) =>
                     PendingRequestsScreen(groupId: state.pathParameters['groupId']!),
+              ),
+              GoRoute(
+                path: 'archive',
+                builder: (context, state) =>
+                    ArchiveScreen(groupId: state.pathParameters['groupId']!),
               ),
               GoRoute(
                 path: 'support',
