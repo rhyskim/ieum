@@ -18,6 +18,7 @@ import 'package:ieum_mobile/features/group/presentation/support_screen.dart';
 import 'package:ieum_mobile/features/notification/presentation/push_intro_screen.dart';
 import 'package:ieum_mobile/features/question/presentation/answer_compose_screen.dart';
 import 'package:ieum_mobile/features/question/presentation/today_question_screen.dart';
+import 'package:ieum_mobile/features/settings/presentation/font_compare_screen.dart';
 import 'package:ieum_mobile/features/settings/presentation/settings_screen.dart';
 import 'package:ieum_mobile/features/shell/presentation/main_shell.dart';
 import 'package:ieum_mobile/features/shell/presentation/placeholder_screens.dart';
@@ -47,6 +48,10 @@ GoRouter appRouter(Ref ref) {
             GoRoute(path: '/settings', builder: (context, state) => const SettingsScreen()),
           ]),
         ],
+      ),
+      GoRoute(
+        path: '/settings/font-compare',
+        builder: (context, state) => const FontCompareScreen(),
       ),
       GoRoute(
         path: '/settings/licenses',
