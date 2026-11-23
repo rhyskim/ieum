@@ -33,6 +33,7 @@ public enum ErrorCode {
     IDENTITY_PROVIDER_ALREADY_LINKED(HttpStatus.CONFLICT, "이 로그인 수단은 이미 다른 소셜 계정으로 연결돼 있어요. 먼저 해제한 뒤 연결해 주세요."),
     LAST_IDENTITY_CANNOT_UNLINK(HttpStatus.CONFLICT, "마지막 로그인 수단은 해제할 수 없어요. 다른 수단을 먼저 연결해 주세요."),
     FEATURE_NOT_ENTITLED(HttpStatus.FORBIDDEN, "현재 요금제에서 사용할 수 없는 기능입니다."),
+    ANSWER_NOT_VISIBLE(HttpStatus.FORBIDDEN, "아직 볼 수 없는 답변이에요. 공개된 뒤에, 내 답변을 마치면 볼 수 있어요."),
     RESOURCE_NOT_FOUND(HttpStatus.NOT_FOUND, "요청한 리소스를 찾을 수 없습니다."),
     METHOD_NOT_ALLOWED(HttpStatus.METHOD_NOT_ALLOWED, "지원하지 않는 HTTP 메서드입니다."),
     NOT_ACCEPTABLE(HttpStatus.NOT_ACCEPTABLE, "지원하지 않는 Accept 미디어 타입입니다."),

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:ieum_mobile/core/network/api_exception.dart';
+import 'package:ieum_mobile/features/archive/presentation/reaction_bar.dart';
 import 'package:ieum_mobile/features/group/presentation/group_widgets.dart';
 import 'package:ieum_mobile/features/question/data/question_repository_impl.dart';
 import 'package:ieum_mobile/features/question/domain/question_models.dart';
@@ -69,6 +70,8 @@ class _BoardBody extends StatelessWidget {
     final Map<String, AnswerView> visibleByAuthor = <String, AnswerView>{
       for (final AnswerView a in board.answers.answers) a.authorUserId: a,
     };
+    // 공개 전에는 서버가 리액션을 거절하므로 바를 두지 않는다.
+    final bool reactable = board.answers.revealStatus != RevealStatus.locked;
     return ListView(
       padding: const EdgeInsets.all(24),
       children: <Widget>[
@@ -89,11 +92,22 @@ class _BoardBody extends StatelessWidget {
         const Text('가족의 답변', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
         const SizedBox(height: 8),
         for (final MemberAnswerStatus member in detail.members)
-          _MemberAnswerTile(member: member, answer: visibleByAuthor[member.userId]),
+          _MemberAnswerTile(
+            groupId: groupId,
+            member: member,
+            answer: visibleByAuthor[member.userId],
+            showReactions: reactable,
+          ),
         // 탈퇴·나간 사람의 공개된 답변은 멤버 목록에 없으므로 따로 보여 준다.
         for (final AnswerView a in board.answers.answers)
           if (!detail.members.any((MemberAnswerStatus m) => m.userId == a.authorUserId))
-            _AnswerCard(name: a.authorName, text: a.textContent),
+            _AnswerCard(
+              groupId: groupId,
+              answerId: a.answerId,
+              name: a.authorName,
+              text: a.textContent,
+              showReactions: reactable,
+            ),
       ],
     );
   }
@@ -121,16 +135,29 @@ class _RevealNotice extends StatelessWidget {
 }
 
 class _MemberAnswerTile extends StatelessWidget {
-  const _MemberAnswerTile({required this.member, required this.answer});
+  const _MemberAnswerTile({
+    required this.groupId,
+    required this.member,
+    required this.answer,
+    required this.showReactions,
+  });
 
+  final String groupId;
   final MemberAnswerStatus member;
   final AnswerView? answer;
+  final bool showReactions;
 
   @override
   Widget build(BuildContext context) {
     final String name = member.mine ? '${member.displayName} (나)' : member.displayName;
     if (answer != null) {
-      return _AnswerCard(name: name, text: answer!.textContent);
+      return _AnswerCard(
+        groupId: groupId,
+        answerId: answer!.answerId,
+        name: name,
+        text: answer!.textContent,
+        showReactions: showReactions,
+      );
     }
     return Card(
       child: Padding(
@@ -164,10 +191,19 @@ class _MemberAnswerTile extends StatelessWidget {
 }
 
 class _AnswerCard extends StatelessWidget {
-  const _AnswerCard({required this.name, required this.text});
+  const _AnswerCard({
+    required this.groupId,
+    required this.answerId,
+    required this.name,
+    required this.text,
+    required this.showReactions,
+  });
 
+  final String groupId;
+  final String answerId;
   final String name;
   final String text;
+  final bool showReactions;
 
   @override
   Widget build(BuildContext context) {
@@ -180,6 +216,10 @@ class _AnswerCard extends StatelessWidget {
             Text(name, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
             const SizedBox(height: 8),
             Text(text, style: const TextStyle(fontSize: 18)),
+            if (showReactions) ...<Widget>[
+              const SizedBox(height: 12),
+              ReactionBar(key: ValueKey<String>(answerId), groupId: groupId, answerId: answerId),
+            ],
           ],
         ),
       ),

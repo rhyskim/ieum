@@ -71,8 +71,7 @@ public class AnswerQueryService {
         find(groupId, dailyQuestionId);
         RevealStatus status = revealEvaluator.revealIfTimedOut(dailyQuestionId, clock.instant());
         boolean iAnswered = answerRepository.findAnsweredUserIds(dailyQuestionId).contains(viewerId);
-        boolean canSeeOthers = status == RevealStatus.REVEALED_ALL
-            || (status == RevealStatus.REVEALED_TIMEOUT && iAnswered);
+        boolean canSeeOthers = AnswerVisibility.canSeeOthers(status, iAnswered);
 
         // 권한이 없으면 타인 행은 조회 자체를 하지 않는다(본문이 메모리에도 올라오지 않는다).
         List<Answer> visible = canSeeOthers

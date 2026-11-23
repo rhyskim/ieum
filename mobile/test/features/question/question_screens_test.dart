@@ -3,11 +3,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:ieum_mobile/core/network/api_exception.dart';
+import 'package:ieum_mobile/features/archive/data/archive_repository_impl.dart';
 import 'package:ieum_mobile/features/question/data/question_repository_impl.dart';
 import 'package:ieum_mobile/features/question/domain/question_models.dart';
 import 'package:ieum_mobile/features/question/domain/question_repository.dart';
 import 'package:ieum_mobile/features/question/presentation/answer_compose_screen.dart';
 import 'package:ieum_mobile/features/question/presentation/today_question_screen.dart';
+
+import '../archive/fake_archive_repository.dart';
 
 class _FakeQuestionRepository implements QuestionRepository {
   RevealStatus status = RevealStatus.locked;
@@ -68,7 +71,10 @@ Widget _app(_FakeQuestionRepository repo, Widget home) {
     ],
   );
   return ProviderScope(
-    overrides: [questionRepositoryProvider.overrideWithValue(repo)],
+    overrides: [
+      questionRepositoryProvider.overrideWithValue(repo),
+      archiveRepositoryProvider.overrideWithValue(FakeArchiveRepository()),
+    ],
     child: MaterialApp.router(routerConfig: router),
   );
 }
@@ -130,6 +136,28 @@ void main() {
     expect(find.text('내가 쓴 답변'), findsOneWidget);
     expect(_maskedPlaceholder, findsNothing);
     expect(find.widgetWithText(ElevatedButton, '내 답변 고치기'), findsOneWidget);
+  });
+
+  testWidgets('공개 후 답변 카드 하단에 이모지 바가 있고(집계는 서버에서 받는다), 공개 전에는 없다', (tester) async {
+    final _FakeQuestionRepository repo = _FakeQuestionRepository()
+      ..status = RevealStatus.revealedAll
+      ..iAnswered = true
+      ..visible = const <AnswerView>[
+        AnswerView(answerId: 'a2', authorUserId: 'dad', authorName: '아빠', mine: false, textContent: '아빠가 쓴 답변'),
+      ];
+    await tester.pumpWidget(_app(repo, const TodayQuestionScreen(groupId: 'g1')));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('사랑해요 2'), findsOneWidget); // 가짜 서버의 집계(2명)
+    expect(find.text('누가 눌렀는지 보기'), findsOneWidget);
+
+    final _FakeQuestionRepository locked = _FakeQuestionRepository()
+      ..iAnswered = true
+      ..visible = const <AnswerView>[
+        AnswerView(answerId: 'a1', authorUserId: 'me', authorName: '아들', mine: true, textContent: '내가 쓴 답변'),
+      ];
+    await tester.pumpWidget(_app(locked, const TodayQuestionScreen(groupId: 'g1')));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('사랑해요'), findsNothing);
   });
 
   testWidgets('시간 초과 공개인데 내가 답하지 않았으면 타인 본문 없이 안내만 보인다', (tester) async {

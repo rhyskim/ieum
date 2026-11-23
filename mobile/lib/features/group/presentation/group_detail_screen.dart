@@ -28,6 +28,12 @@ class GroupDetailScreen extends ConsumerWidget {
                 onPressed: () => context.push('/groups/$groupId/question'),
               ),
               const SizedBox(height: 12),
+              LargeButton(
+                label: '지난 질문 보기',
+                outlined: true,
+                onPressed: () => context.push('/groups/$groupId/archive'),
+              ),
+              const SizedBox(height: 12),
               if (group.iAmOwner) ...<Widget>[
                 LargeButton(
                   label: '입장 코드 보기',

@@ -8,6 +8,7 @@ import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
@@ -90,4 +91,21 @@ public interface DailyQuestionRepository extends JpaRepository<DailyQuestion, UU
         + "and d.revealStatus = com.ieum.backend.domain.common.enums.RevealStatus.LOCKED "
         + "and d.autoRevealAt <= :now and exists (select 1 from Answer a where a.dailyQuestion.id = d.id)")
     int revealTimeoutIfDue(@Param("id") UUID id, @Param("now") Instant now);
+
+    /** 아카이브 첫 페이지: cycle_date 내림차순, id 보조 정렬(ADR-0008 결정 5). */
+    @EntityGraph(attributePaths = "question")
+    @Query("select d from DailyQuestion d where d.group.id = :groupId order by d.cycleDate desc, d.id desc")
+    List<DailyQuestion> findArchiveFirstPage(@Param("groupId") UUID groupId, Pageable pageable);
+
+    /** 아카이브 다음 페이지: 마지막 항목 (cycle_date, id) 보다 뒤. OFFSET이 아니라 키셋이라 새 항목이 생겨도 밀리지 않는다. */
+    @EntityGraph(attributePaths = "question")
+    @Query("select d from DailyQuestion d where d.group.id = :groupId "
+        + "and (d.cycleDate < :cycleDate or (d.cycleDate = :cycleDate and d.id < :id)) "
+        + "order by d.cycleDate desc, d.id desc")
+    List<DailyQuestion> findArchiveAfter(
+        @Param("groupId") UUID groupId,
+        @Param("cycleDate") LocalDate cycleDate,
+        @Param("id") UUID id,
+        Pageable pageable
+    );
 }
