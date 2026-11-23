@@ -18,6 +18,9 @@ import 'package:ieum_mobile/features/group/presentation/support_screen.dart';
 import 'package:ieum_mobile/features/notification/presentation/push_intro_screen.dart';
 import 'package:ieum_mobile/features/question/presentation/answer_compose_screen.dart';
 import 'package:ieum_mobile/features/question/presentation/today_question_screen.dart';
+import 'package:ieum_mobile/features/settings/presentation/settings_screen.dart';
+import 'package:ieum_mobile/features/shell/presentation/main_shell.dart';
+import 'package:ieum_mobile/features/shell/presentation/placeholder_screens.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 part 'app_router.g.dart';
@@ -27,6 +30,28 @@ GoRouter appRouter(Ref ref) {
   return GoRouter(
     initialLocation: '/',
     routes: [
+      // 하단 4탭. 홈 탭은 그룹 목록이고, 그룹 하위 화면(/groups/...)은 탭 위에 전체 화면으로 쌓인다.
+      StatefulShellRoute.indexedStack(
+        builder: (context, state, shell) => MainShell(navigationShell: shell),
+        branches: [
+          StatefulShellBranch(routes: [
+            GoRoute(path: '/home', builder: (context, state) => const GroupListScreen()),
+          ]),
+          StatefulShellBranch(routes: [
+            GoRoute(path: '/list', builder: (context, state) => const ListTabPlaceholder()),
+          ]),
+          StatefulShellBranch(routes: [
+            GoRoute(path: '/calendar', builder: (context, state) => const CalendarPlaceholderScreen()),
+          ]),
+          StatefulShellBranch(routes: [
+            GoRoute(path: '/settings', builder: (context, state) => const SettingsScreen()),
+          ]),
+        ],
+      ),
+      GoRoute(
+        path: '/settings/licenses',
+        builder: (context, state) => const LicensePage(applicationName: '이음'),
+      ),
       GoRoute(
         path: '/',
         builder: (context, state) => const Phase0BootstrapScreen(),
@@ -60,6 +85,7 @@ GoRouter appRouter(Ref ref) {
       ),
       GoRoute(
         path: '/groups',
+        redirect: (context, state) => state.uri.path == '/groups' ? '/home' : null,
         builder: (context, state) => const GroupListScreen(),
         routes: [
           GoRoute(
