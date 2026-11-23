@@ -16,8 +16,8 @@ class SettingsScreen extends StatelessWidget {
         children: <Widget>[
           const TextScaleSlider(),
           const SizedBox(height: 24),
-          SizedBox(
-            height: 56,
+          ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: 56),
             child: OutlinedButton.icon(
               key: const ValueKey('open_licenses_button'),
               onPressed: () => context.push('/settings/licenses'),
@@ -27,8 +27,8 @@ class SettingsScreen extends StatelessWidget {
           ),
           if (showFontCompareEntry) ...<Widget>[
             const SizedBox(height: 12),
-            SizedBox(
-              height: 56,
+            ConstrainedBox(
+              constraints: const BoxConstraints(minHeight: 56),
               child: OutlinedButton.icon(
                 onPressed: () => context.push('/settings/font-compare'),
                 icon: const Icon(Icons.text_fields),

@@ -14,7 +14,11 @@ const List<FontLicense> bundledFontLicenses = <FontLicense>[
 ];
 
 /// 앱 시작 시 한 번 호출해 글꼴 라이선스를 등록한다.
+bool _registered = false;
+
 void registerFontLicenses() {
+  if (_registered) return;
+  _registered = true;
   LicenseRegistry.addLicense(() async* {
     for (final FontLicense f in bundledFontLicenses) {
       final String text = await rootBundle.loadString(f.assetPath);

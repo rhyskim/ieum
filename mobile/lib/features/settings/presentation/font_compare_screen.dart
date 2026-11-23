@@ -29,14 +29,21 @@ const String _sampleParagraph =
 /// 앱 안 글꼴 비교 화면(개발용). 각 후보를 18sp 이상 본문·숫자·긴 문단으로 보여 주고,
 /// 마지막에 "제목만 손글씨 + 본문 고운돋움" 조합을 보여 준다.
 /// 글꼴 파일이 없는 후보는 건너뛰므로 파일 유무와 무관하게 열린다.
-class FontCompareScreen extends StatelessWidget {
+class FontCompareScreen extends StatefulWidget {
   const FontCompareScreen({this.available, super.key});
 
   /// 테스트 등에서 사용 가능한 후보를 직접 지정한다. null이면 에셋 목록으로 판단한다.
   final List<FontCandidate>? available;
 
+  @override
+  State<FontCompareScreen> createState() => _FontCompareScreenState();
+}
+
+class _FontCompareScreenState extends State<FontCompareScreen> {
+  late final Future<List<FontCandidate>> _candidates = _load();
+
   Future<List<FontCandidate>> _load() async {
-    if (available != null) return available!;
+    if (widget.available != null) return widget.available!;
     final AssetManifest manifest = await AssetManifest.loadFromAssetBundle(rootBundle);
     final Set<String> assets = manifest.listAssets().toSet();
     return fontCandidates.where((FontCandidate c) => assets.contains(c.assetPath)).toList();
@@ -47,8 +54,9 @@ class FontCompareScreen extends StatelessWidget {
     return Scaffold(
       appBar: AppBar(title: const Text('글꼴 비교')),
       body: FutureBuilder<List<FontCandidate>>(
-        future: _load(),
+        future: _candidates,
         builder: (BuildContext context, AsyncSnapshot<List<FontCandidate>> snap) {
+          if (snap.hasError) return const Center(child: Text('글꼴 목록을 불러오지 못했어요.'));
           if (!snap.hasData) return const Center(child: CircularProgressIndicator());
           final List<FontCandidate> items = snap.data!;
           return ListView(

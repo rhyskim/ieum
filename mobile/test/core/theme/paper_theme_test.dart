@@ -57,6 +57,10 @@ void main() {
       expect(contrast(PaperTheme.onAccent, PaperTheme.accent), greaterThanOrEqualTo(4.5));
       expect(contrast(PaperTheme.textPrimary, PaperTheme.surface), greaterThanOrEqualTo(4.5));
       expect(contrast(PaperTheme.error, PaperTheme.surface), greaterThanOrEqualTo(4.5));
+      // 오류 문구는 종이 배경 위에 바로 그려지므로 배경 양 끝 모두에서 확인한다.
+      for (final Color bg in PaperTheme.backgroundSamples) {
+        expect(contrast(PaperTheme.error, bg), greaterThanOrEqualTo(4.5));
+      }
     });
   });
 
@@ -178,7 +182,7 @@ void main() {
   group('최대 배율 오버플로', () {
     for (final double scale in <double>[1.0, 1.7]) {
       testWidgets('설정·목록·캘린더 탭이 배율 ${(scale * 100).round()}%에서 오버플로 없이 그려진다', (tester) async {
-        SharedPreferences.setMockInitialValues({'flutter.text_scale_user': scale});
+        SharedPreferences.setMockInitialValues({'flutter.${TextScaleConfig.prefsKey}': scale});
         final SharedPreferences prefs = await SharedPreferences.getInstance();
         tester.view.physicalSize = const Size(360 * 3, 640 * 3);
         tester.view.devicePixelRatio = 3;
@@ -188,7 +192,8 @@ void main() {
           const ListTabPlaceholder(),
           const CalendarPlaceholderScreen(),
         ]) {
-          await tester.pumpWidget(_host(w, prefs: prefs, systemScale: 1.5));
+          // 100%는 시스템 배율도 1.0, 최대 배율은 시스템 1.5 × 사용자 1.7이 상한(1.7)으로 잘린 값.
+          await tester.pumpWidget(_host(w, prefs: prefs, systemScale: scale == 1.0 ? 1.0 : 1.5));
           await tester.pumpAndSettle();
           expect(tester.takeException(), isNull);
         }

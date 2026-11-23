@@ -25,7 +25,8 @@ abstract final class PaperTheme {
   static const Color onAccent = Color(0xFFFFFFFF);
   static const Color surface = Color(0xFFFFFBF0);
   static const Color border = Color(0xFFB8996A);
-  static const Color error = Color(0xFF9C2A1E);
+  static const Color error = Color(0xFF8C2016);
+  static const Color navIndicator = Color(0xFFE6D2A8);
 
   // ── 크기 불변식 (CLAUDE.md §5) ──
   static const double minBodySize = 18;

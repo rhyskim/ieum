@@ -26,6 +26,8 @@ class TextScaleSlider extends ConsumerWidget {
             max: (TextScaleConfig.steps.length - 1).toDouble(),
             divisions: TextScaleConfig.steps.length - 1,
             label: '${(scale * 100).round()}%',
+            semanticFormatterCallback: (double v) =>
+                '${(TextScaleConfig.steps[v.round()] * 100).round()}%',
             onChanged: (double v) =>
                 ref.read(userTextScaleProvider.notifier).set(TextScaleConfig.steps[v.round()]),
           ),

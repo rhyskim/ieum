@@ -109,6 +109,11 @@ abstract final class AppTheme {
       colorScheme: colorScheme,
       scaffoldBackgroundColor: background,
       textTheme: textTheme,
+      navigationBarTheme: NavigationBarThemeData(
+        backgroundColor: Colors.transparent,
+        indicatorColor: isHighContrast ? null : PaperTheme.navIndicator,
+        labelTextStyle: WidgetStatePropertyAll<TextStyle?>(textTheme.bodyMedium),
+      ),
       appBarTheme: AppBarTheme(
         backgroundColor: isHighContrast ? surface : Colors.transparent,
         scrolledUnderElevation: 0,
