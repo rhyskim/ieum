@@ -21,16 +21,10 @@ class OnDeviceMicPermissionService implements MicPermissionService {
 
   @override
   Future<void> openSettings() async {
-    await openAppSettings();
+    try {
+      await openAppSettings();
+    } catch (_) {
+      // 설정을 열지 못해도 앱은 계속 동작한다. 안내 문구가 화면에 남아 있다.
+    }
   }
-}
-
-class NoopMicPermissionService implements MicPermissionService {
-  const NoopMicPermissionService();
-
-  @override
-  Future<MicPermissionStatus> request() async => MicPermissionStatus.denied;
-
-  @override
-  Future<void> openSettings() async {}
 }

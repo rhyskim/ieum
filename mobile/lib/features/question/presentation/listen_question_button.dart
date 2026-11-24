@@ -21,6 +21,8 @@ class _ListenQuestionButtonState extends ConsumerState<ListenQuestionButton> {
   bool _checked = false;
   bool _speaking = false;
   bool _slow = false;
+  // 읽기 요청마다 올린다. 멈춘 요청의 완료가 새 요청의 상태를 덮어쓰지 않게 한다.
+  int _generation = 0;
 
   @override
   void initState() {
@@ -37,6 +39,14 @@ class _ListenQuestionButtonState extends ConsumerState<ListenQuestionButton> {
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // 다른 화면(답변 쓰기 등)이 위에 열리면 이 화면은 dispose되지 않으므로 직접 멈춘다.
+    final ModalRoute<dynamic>? route = ModalRoute.of(context);
+    if (route != null && !route.isCurrent && _speaking) _stop();
+  }
+
+  @override
   void dispose() {
     _tts.stop();
     super.dispose();
@@ -45,12 +55,14 @@ class _ListenQuestionButtonState extends ConsumerState<ListenQuestionButton> {
   double get _rate => _slow ? TtsSpeechRate.slow : TtsSpeechRate.normal;
 
   Future<void> _play() async {
+    final int generation = ++_generation;
     setState(() => _speaking = true);
     await _tts.speak(widget.text, speechRate: _rate);
-    if (mounted) setState(() => _speaking = false);
+    if (mounted && generation == _generation) setState(() => _speaking = false);
   }
 
   Future<void> _stop() async {
+    _generation++;
     await _tts.stop();
     if (mounted) setState(() => _speaking = false);
   }
@@ -59,6 +71,7 @@ class _ListenQuestionButtonState extends ConsumerState<ListenQuestionButton> {
     setState(() => _slow = slow);
     // 읽는 도중 속도를 바꾸면 처음부터 다시 읽는다.
     if (_speaking) {
+      _generation++;
       await _tts.stop();
       if (mounted) await _play();
     }
@@ -80,8 +93,8 @@ class _ListenQuestionButtonState extends ConsumerState<ListenQuestionButton> {
           const Text('이 기기에는 한국어 음성이 없어서 질문을 들려드릴 수 없어요.', style: TextStyle(fontSize: 18)),
         ] else ...<Widget>[
           const SizedBox(height: 8),
-          SizedBox(
-            height: 56,
+          ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: 56),
             child: SwitchListTile(
               contentPadding: EdgeInsets.zero,
               title: const Text('천천히 읽기', style: TextStyle(fontSize: 18)),

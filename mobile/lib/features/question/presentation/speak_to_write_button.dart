@@ -7,6 +7,7 @@ import 'package:ieum_mobile/core/voice/stt_recognition_result.dart';
 import 'package:ieum_mobile/core/voice/stt_service.dart';
 import 'package:ieum_mobile/core/voice/voice_providers.dart';
 import 'package:ieum_mobile/features/group/presentation/group_widgets.dart';
+import 'package:ieum_mobile/features/question/domain/question_models.dart';
 
 enum _Notice { none, denied, permanentlyDenied, unsupported, error }
 
@@ -53,7 +54,13 @@ class _SpeakToWriteButtonState extends ConsumerState<SpeakToWriteButton> {
       _starting = true;
       _notice = _Notice.none;
     });
-    final SttAvailability availability = await _stt.initialize();
+    final SttAvailability availability;
+    try {
+      availability = await _stt.initialize();
+    } catch (_) {
+      _fail(_Notice.unsupported);
+      return;
+    }
     if (!mounted) return;
     if (availability != SttAvailability.ready) {
       setState(() {
@@ -72,17 +79,32 @@ class _SpeakToWriteButtonState extends ConsumerState<SpeakToWriteButton> {
       _starting = false;
       _listening = true;
     });
-    _sub = _stt.startListening().listen(
-      _onResult,
-      onError: (Object _) => _finish(_Notice.error),
-      onDone: () => _finish(_Notice.none),
-      cancelOnError: true,
-    );
+    try {
+      _sub = _stt.startListening().listen(
+        _onResult,
+        onError: (Object _) => _finish(_Notice.error),
+        onDone: () => _finish(_Notice.none),
+        cancelOnError: true,
+      );
+    } catch (_) {
+      _finish(_Notice.error);
+    }
+  }
+
+  void _fail(_Notice notice) {
+    if (mounted) {
+      setState(() {
+        _starting = false;
+        _notice = notice;
+      });
+    }
   }
 
   void _onResult(SttRecognitionResult result) {
     if (!mounted) return;
-    final String text = _base + result.text;
+    // 키보드 입력과 달리 컨트롤러에 직접 넣는 값은 maxLength가 적용되지 않으므로 서버 한도(2000자)로 직접 자른다.
+    String text = _base + result.text;
+    if (text.length > maxAnswerLength) text = text.substring(0, maxAnswerLength);
     widget.controller.value = TextEditingValue(
       text: text,
       selection: TextSelection.collapsed(offset: text.length),
@@ -102,7 +124,9 @@ class _SpeakToWriteButtonState extends ConsumerState<SpeakToWriteButton> {
   }
 
   Future<void> _stop() async {
-    await _stt.stopListening();
+    try {
+      await _stt.stopListening();
+    } catch (_) {}
     _finish(_Notice.none);
   }
 

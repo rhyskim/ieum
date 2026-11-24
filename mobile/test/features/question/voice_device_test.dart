@@ -19,8 +19,13 @@ import 'package:ieum_mobile/features/question/presentation/speak_to_write_button
 class _FakeTts implements TtsService {
   bool koreanAvailable = true;
   final List<double> rates = <double>[];
+  final List<String> spoken = <String>[];
   int stopCalls = 0;
   Completer<void>? _speaking;
+
+  /// true면 stop이 이전 speak를 즉시 끝내지 않고 나중에 끝낸다(Android에서 stop 응답이 먼저 오는 순서를 흉내 낸다).
+  bool lateCompletionOnStop = false;
+  final List<Completer<void>> _stale = <Completer<void>>[];
 
   @override
   Future<bool> initialize() async => koreanAvailable;
@@ -28,6 +33,7 @@ class _FakeTts implements TtsService {
   @override
   Future<void> speak(String text, {double speechRate = TtsSpeechRate.normal}) {
     rates.add(speechRate);
+    spoken.add(text);
     _speaking = Completer<void>();
     return _speaking!.future;
   }
@@ -36,10 +42,20 @@ class _FakeTts implements TtsService {
   Future<void> stop() async {
     stopCalls++;
     final Completer<void>? c = _speaking;
-    if (c != null && !c.isCompleted) c.complete();
+    if (c == null || c.isCompleted) return;
+    if (lateCompletionOnStop) {
+      _stale.add(c);
+    } else {
+      c.complete();
+    }
   }
 
   void finishSpeaking() => _speaking?.complete();
+  void completeStaleSpeaks() {
+    for (final Completer<void> c in _stale) {
+      if (!c.isCompleted) c.complete();
+    }
+  }
 }
 
 class _FakeStt implements SttService {
@@ -112,6 +128,7 @@ void main() {
       await tester.pump();
       expect(find.text('듣기 멈추기'), findsOneWidget);
       expect(tts.rates, <double>[TtsSpeechRate.normal]);
+      expect(tts.spoken, <String>['오늘 기뻤던 일은?']);
 
       await tester.tap(find.text('듣기 멈추기'));
       await tester.pumpAndSettle();
@@ -146,6 +163,51 @@ void main() {
       await tester.tap(find.byType(Switch));
       await tester.pumpAndSettle();
       expect(tts.rates.last, TtsSpeechRate.normal);
+    });
+
+    testWidgets('속도를 바꿔 다시 읽는 동안 이전 읽기의 늦은 완료가 새 읽기 상태를 덮어쓰지 않는다', (tester) async {
+      final _FakeTts tts = _FakeTts()..lateCompletionOnStop = true;
+      await tester.pumpWidget(_wrap(const ListenQuestionButton(text: '질문'), tts: tts));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('질문 듣기'));
+      await tester.pump();
+
+      await tester.tap(find.byType(Switch));
+      await tester.pumpAndSettle();
+      tts.completeStaleSpeaks();
+      await tester.pumpAndSettle();
+      expect(find.text('듣기 멈추기'), findsOneWidget); // 새 속도로 읽는 중
+    });
+
+    testWidgets('다른 화면이 위에 열리면 읽기를 멈춘다(이 화면은 dispose되지 않는다)', (tester) async {
+      final _FakeTts tts = _FakeTts();
+      await tester.pumpWidget(ProviderScope(
+        overrides: [ttsServiceProvider.overrideWithValue(tts)],
+        child: MaterialApp(
+          home: Scaffold(
+            body: Builder(
+              builder: (BuildContext context) => Column(children: <Widget>[
+                const ListenQuestionButton(text: '질문'),
+                TextButton(
+                  onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(
+                    builder: (_) => const Scaffold(body: Text('다음 화면')),
+                  )),
+                  child: const Text('이동'),
+                ),
+              ]),
+            ),
+          ),
+        ),
+      ));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('질문 듣기'));
+      await tester.pump();
+      expect(tts.stopCalls, 0);
+
+      await tester.tap(find.text('이동'));
+      await tester.pumpAndSettle();
+      expect(find.text('다음 화면'), findsOneWidget);
+      expect(tts.stopCalls, greaterThanOrEqualTo(1));
     });
 
     testWidgets('화면을 벗어나면 읽기를 멈춘다', (tester) async {
@@ -203,6 +265,17 @@ void main() {
       await tester.pumpAndSettle();
       expect(controller.text, '오늘은 손주가 왔어요');
       expect(find.text('말해서 쓰기'), findsOneWidget);
+    });
+
+    testWidgets('인식 결과가 길어도 입력창은 서버 한도(2000자)를 넘지 않는다', (tester) async {
+      final _FakeStt stt = _FakeStt();
+      final TextEditingController controller = await pumpButton(tester, stt);
+      await tester.tap(find.text('말해서 쓰기'));
+      await tester.pumpAndSettle();
+
+      stt.results.add(SttRecognitionResult(text: '가' * 2500, isFinal: false));
+      await tester.pump();
+      expect(controller.text.length, 2000);
     });
 
     testWidgets('듣는 중에 다시 누르면 인식을 멈춘다', (tester) async {
@@ -315,6 +388,12 @@ void main() {
       await tester.pump();
       await stt.results.close();
       await tester.pumpAndSettle();
+      await tester.ensureVisible(find.byType(TextField));
+      // 두 번째 인식 결과가 기존 글 뒤에 이어 붙었고, 30자를 넘겨 저장 버튼이 열린다.
+      expect(tester.widget<TextField>(find.byType(TextField)).controller!.text, '짧은 말 $spoken');
+      await tester.ensureVisible(find.widgetWithText(ElevatedButton, '저장하기'));
+      await tester.pump();
+      expect(tester.widget<ElevatedButton>(find.widgetWithText(ElevatedButton, '저장하기')).onPressed, isNotNull);
       await tester.ensureVisible(find.byType(TextField));
       await tester.enterText(find.byType(TextField), '짧은 말 $spoken!');
       await tester.pump();
