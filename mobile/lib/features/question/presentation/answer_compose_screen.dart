@@ -100,6 +100,14 @@ class _AnswerComposeScreenState extends ConsumerState<AnswerComposeScreen> {
               label: _saving ? '저장하는 중...' : '저장하기',
               onPressed: enough && !_saving ? _save : null,
             ),
+            const SizedBox(height: 12),
+            LargeButton(
+              label: '목소리로 답하기',
+              outlined: true,
+              onPressed: () => context.push(
+                '/groups/${widget.groupId}/question/${widget.dailyQuestionId}/voice',
+              ),
+            ),
           ],
         ),
       ),

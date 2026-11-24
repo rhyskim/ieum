@@ -18,6 +18,7 @@ import 'package:ieum_mobile/features/group/presentation/support_screen.dart';
 import 'package:ieum_mobile/features/notification/presentation/push_intro_screen.dart';
 import 'package:ieum_mobile/features/question/presentation/answer_compose_screen.dart';
 import 'package:ieum_mobile/features/question/presentation/today_question_screen.dart';
+import 'package:ieum_mobile/features/voice/presentation/voice_recorder_screen.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 part 'app_router.g.dart';
@@ -107,6 +108,12 @@ GoRouter appRouter(Ref ref) {
                       dailyQuestionId: state.pathParameters['dailyQuestionId']!,
                       initialText: state.extra as String?,
                     ),
+                    routes: [
+                      GoRoute(
+                        path: 'voice',
+                        builder: (context, state) => const VoiceRecorderScreen(),
+                      ),
+                    ],
                   ),
                 ],
               ),
