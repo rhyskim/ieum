@@ -9,8 +9,12 @@ String? routeForPush(Map<String, String> data) {
     'JOIN_REQUESTED' => '/groups/$groupId/requests',
     'JOIN_APPROVED' => '/groups/$groupId',
     'JOIN_REJECTED' => '/groups',
-    // 새 질문 도착과 "모두 답했어요" 알림 모두 해당 그룹의 오늘의 질문 화면으로 간다.
-    'QUESTION_ASSIGNED' || 'ALL_ANSWERED' => '/groups/$groupId/question',
+    // 새 질문·리마인드·공개 알림 모두 해당 그룹의 오늘의 질문 화면으로 간다.
+    'QUESTION_ASSIGNED' ||
+    'ALL_ANSWERED' ||
+    'REMINDER' ||
+    'REVEALED_TIMEOUT' =>
+      '/groups/$groupId/question',
     _ => null,
   };
 }
