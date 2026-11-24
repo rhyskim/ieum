@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
 import 'package:ieum_mobile/app.dart';
 import 'package:ieum_mobile/core/network/api_exception.dart';
 import 'package:ieum_mobile/core/theme/accessibility_config.dart';
@@ -26,6 +27,12 @@ class _FakeEntitlementRepository implements EntitlementRepository {
 
   @override
   Future<FeatureEntitlement> fetchEntitlementPolicy() => onFetch();
+}
+
+/// 앱의 '/'는 홈 탭이므로 Phase0 준비 화면은 개발용 경로 /bootstrap으로 연다.
+Future<void> _openBootstrap(WidgetTester tester) async {
+  await tester.pump();
+  GoRouter.of(tester.element(find.byType(Scaffold).first)).go('/bootstrap');
 }
 
 void main() {
@@ -62,6 +69,7 @@ void main() {
         ),
       );
 
+      await _openBootstrap(tester);
       await tester.pumpAndSettle();
 
       expect(find.text('상태: UP'), findsOneWidget);
@@ -98,6 +106,7 @@ void main() {
         ),
       );
 
+      await _openBootstrap(tester);
       await tester.pumpAndSettle();
       expect(find.text('서버에 연결할 수 없습니다.'), findsOneWidget);
       expect(find.byKey(const ValueKey('retry_health_button')), findsOneWidget);
@@ -148,6 +157,7 @@ void main() {
         ),
       );
 
+      await _openBootstrap(tester);
       await tester.pumpAndSettle();
 
       expect(tester.takeException(), isNull);
