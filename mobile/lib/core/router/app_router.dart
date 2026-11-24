@@ -57,8 +57,13 @@ GoRouter appRouter(Ref ref) {
         path: '/settings/licenses',
         builder: (context, state) => const LicensePage(applicationName: '이음'),
       ),
+      // 로그인·복구·푸시 안내 화면이 가는 '/'는 홈 탭이다. 준비(Phase0) 화면은 개발용 경로로 남긴다.
       GoRoute(
         path: '/',
+        redirect: (context, state) => '/home',
+      ),
+      GoRoute(
+        path: '/bootstrap',
         builder: (context, state) => const Phase0BootstrapScreen(),
       ),
       GoRoute(
