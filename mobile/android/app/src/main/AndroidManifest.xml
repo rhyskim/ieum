@@ -2,6 +2,7 @@
     xmlns:tools="http://schemas.android.com/tools">
     <uses-permission android:name="android.permission.INTERNET"/>
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+    <uses-permission android:name="android.permission.RECORD_AUDIO"/>
 
     <application
         android:label="이음"
@@ -55,6 +56,11 @@
         <!-- 카카오톡·네이버 앱 로그인 -->
         <package android:name="com.kakao.talk"/>
         <package android:name="com.nhn.android.search"/>
+        <!-- 전화 유도 모달의 tel: 실행 -->
+        <intent>
+            <action android:name="android.intent.action.DIAL"/>
+            <data android:scheme="tel"/>
+        </intent>
         <intent>
             <action android:name="android.intent.action.PROCESS_TEXT"/>
             <data android:mimeType="text/plain"/>
