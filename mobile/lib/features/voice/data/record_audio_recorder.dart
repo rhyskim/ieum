@@ -61,6 +61,7 @@ class RecordAudioRecorder implements AudioRecorderPort {
     } on RecorderException {
       rethrow;
     } on Object catch (e) {
+      unawaited(_deactivateSession());
       throw RecorderException(_classify(e, fallback: RecordingNotice.micBusy), e);
     }
   }
@@ -69,7 +70,14 @@ class RecordAudioRecorder implements AudioRecorderPort {
   Future<void> pause() => _guard(_recorder.pause);
 
   @override
-  Future<void> resume() => _guard(_recorder.resume);
+  Future<void> resume() => _guard(() async {
+        // 인터럽트로 잃은 오디오 포커스를 다시 얻는다. 다른 앱이 쓰는 중이면 거절된다.
+        final AudioSession session = await AudioSession.instance;
+        if (!await session.setActive(true)) {
+          throw const RecorderException(RecordingNotice.micBusy);
+        }
+        await _recorder.resume();
+      });
 
   @override
   Future<String?> stop() async {
@@ -78,7 +86,15 @@ class RecordAudioRecorder implements AudioRecorderPort {
     } on Object catch (e) {
       throw RecorderException(_classify(e), e);
     } finally {
-      unawaited(AudioSession.instance.then((AudioSession s) => s.setActive(false)).catchError((Object _) => false));
+      unawaited(_deactivateSession());
+    }
+  }
+
+  Future<void> _deactivateSession() async {
+    try {
+      await (await AudioSession.instance).setActive(false);
+    } on Object {
+      // 세션 정리 실패는 녹음 파일에 영향이 없다.
     }
   }
 
@@ -92,14 +108,20 @@ class RecordAudioRecorder implements AudioRecorderPort {
   Stream<InterruptionKind> get interruptions => _interruptions.stream;
 
   @override
-  Stream<double> get levels => _recorder
+  Stream<double> get levels => _levels;
+
+  // 화면이 다시 빌드돼도 스트림을 새로 만들지 않도록 한 번만 만든다.
+  // current는 dBFS(-160..0). 음성 범위인 -50dB 이상만 0..1로 편다.
+  late final Stream<double> _levels = _recorder
       .onAmplitudeChanged(const Duration(milliseconds: 100))
-      // current는 dBFS(-160..0). 음성 범위인 -50dB 이상만 0..1로 편다.
-      .map((Amplitude a) => ((a.current + 50) / 50).clamp(0.0, 1.0));
+      .map((Amplitude a) => ((a.current + 50) / 50).clamp(0.0, 1.0))
+      .asBroadcastStream();
 
   Future<void> _guard(Future<void> Function() action) async {
     try {
       await action();
+    } on RecorderException {
+      rethrow;
     } on Object catch (e) {
       throw RecorderException(_classify(e), e);
     }

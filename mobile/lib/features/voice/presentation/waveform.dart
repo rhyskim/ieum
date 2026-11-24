@@ -15,7 +15,7 @@ class Waveform extends StatefulWidget {
 
 class _WaveformState extends State<Waveform> {
   static const int _bars = 32;
-  final List<double> _values = List<double>.filled(_bars, 0.05);
+  final List<double> _values = List<double>.filled(_bars, 0.05, growable: true);
   StreamSubscription<double>? _sub;
 
   @override

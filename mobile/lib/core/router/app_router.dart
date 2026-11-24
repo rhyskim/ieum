@@ -108,12 +108,10 @@ GoRouter appRouter(Ref ref) {
                       dailyQuestionId: state.pathParameters['dailyQuestionId']!,
                       initialText: state.extra as String?,
                     ),
-                    routes: [
-                      GoRoute(
-                        path: 'voice',
-                        builder: (context, state) => const VoiceRecorderScreen(),
-                      ),
-                    ],
+                  ),
+                  GoRoute(
+                    path: ':dailyQuestionId/voice',
+                    builder: (context, state) => const VoiceRecorderScreen(),
                   ),
                 ],
               ),

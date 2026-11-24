@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:ieum_mobile/core/voice/mic_permission_gateway.dart';
 import 'package:ieum_mobile/features/voice/domain/recording_models.dart';
 import 'package:ieum_mobile/features/voice/domain/voice_ports.dart';
 
@@ -47,8 +48,10 @@ class FakeRecorder implements AudioRecorderPort {
   @override
   Stream<InterruptionKind> get interruptions => interruptionController.stream;
 
+  final StreamController<double> levelController = StreamController<double>.broadcast();
+
   @override
-  Stream<double> get levels => const Stream<double>.empty();
+  Stream<double> get levels => levelController.stream;
 
   @override
   Future<void> dispose() async {}
@@ -127,6 +130,16 @@ class FakePhoneLauncher implements PhoneLauncher {
     called.add(phone);
     return result;
   }
+}
+
+class FakeMicGateway implements MicPermissionGateway {
+  int settingsOpened = 0;
+
+  @override
+  Future<MicPermissionResult> request() async => MicPermissionResult.granted;
+
+  @override
+  Future<void> openSettings() async => settingsOpened++;
 }
 
 const RecorderException permissionDenied = RecorderException(RecordingNotice.permissionDenied);

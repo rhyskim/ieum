@@ -27,6 +27,8 @@ class _PreviewPlayerState extends ConsumerState<PreviewPlayer> {
   @override
   void initState() {
     super.initState();
+    // autoDispose provider가 마운트 중 정리되지 않도록 구독을 유지한다.
+    ref.listenManual(previewPlayerProvider, (_, __) {});
     _subs
       ..add(_player.position.listen((Duration p) => setState(() => _position = p)))
       ..add(_player.duration.listen((Duration? d) => setState(() => _duration = d ?? Duration.zero)))

@@ -254,5 +254,33 @@ void main() {
       ctl().dismissNotice();
       expect(read().notice, RecordingNotice.none);
     });
+
+    test('시작을 기다리는 중 연타해도 녹음기는 한 번만 시작된다', () async {
+      await Future.wait(<Future<void>>[ctl().start(), ctl().start(), ctl().start()]);
+      expect(recorder.started, hasLength(1));
+      expect(read().phase, RecordingPhase.recording);
+    });
+
+    test('180초 자동 완료가 진행되는 중 들어온 일시정지·완료 요청은 무시된다', () async {
+      await ctl().start();
+      clock.advance(const Duration(seconds: 180)); // _finalize 시작(비동기 stop 대기)
+      await ctl().pause();
+      await ctl().finish();
+      await Future<void>.delayed(Duration.zero);
+      expect(recorder.stopCalls, 1);
+      expect(read().phase, RecordingPhase.completed);
+      expect(read().reachedMax, isTrue);
+    });
+
+    test('일시정지 실패 뒤 stop이 unknown으로 실패해도 구체적인 안내를 유지한다', () async {
+      await ctl().start();
+      clock.advance(const Duration(seconds: 10));
+      recorder.pauseError = const RecorderException(RecordingNotice.storageFull);
+      recorder.stopError = const RecorderException(RecordingNotice.unknown);
+      await ctl().pause();
+      expect(read().phase, RecordingPhase.completed);
+      expect(read().notice, RecordingNotice.storageFull);
+      expect(read().filePath, recorder.started.single);
+    });
   });
 }

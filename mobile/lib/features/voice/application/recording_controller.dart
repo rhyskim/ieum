@@ -13,8 +13,8 @@ final AutoDisposeNotifierProvider<RecordingController, RecordingState> recording
 /// 녹음 상태 머신: idle → recording ⇄ paused → completed(→ 다시 recording).
 /// 파일은 어떤 실패에서도 지우지 않는다. 지우는 경우는 새 녹음이 성공적으로 시작된 뒤 이전 파일 교체뿐이다.
 class RecordingController extends AutoDisposeNotifier<RecordingState> {
-  late final AudioRecorderPort _recorder = ref.read(audioRecorderProvider);
-  late final RecordingClock _clock = ref.read(recordingClockProvider);
+  late AudioRecorderPort _recorder;
+  late RecordingClock _clock;
 
   StreamSubscription<void>? _tickSub;
   StreamSubscription<InterruptionKind>? _interruptionSub;
@@ -25,11 +25,17 @@ class RecordingController extends AutoDisposeNotifier<RecordingState> {
 
   /// 녹음기가 열려 있는 동안 true. dispose 시 state를 읽지 않기 위한 값.
   bool _live = false;
+  bool _starting = false;
+  bool _disposed = false;
 
   @override
   RecordingState build() {
+    // watch로 녹음기 수명을 컨트롤러와 맞춘다(autoDispose provider가 먼저 정리되지 않도록).
+    _recorder = ref.watch(audioRecorderProvider);
+    _clock = ref.watch(recordingClockProvider);
     _interruptionSub = _recorder.interruptions.listen(_onInterruption);
     ref.onDispose(() {
+      _disposed = true;
       _tickSub?.cancel();
       _interruptionSub?.cancel();
       // 녹음 중 화면을 떠나면 파일을 살리기 위해 정상 종료만 한다(삭제하지 않음).
@@ -46,7 +52,16 @@ class RecordingController extends AutoDisposeNotifier<RecordingState> {
   }
 
   Future<void> start() async {
-    if (state.phase == RecordingPhase.recording || state.phase == RecordingPhase.paused) return;
+    if (_starting || state.phase == RecordingPhase.recording || state.phase == RecordingPhase.paused) return;
+    _starting = true;
+    try {
+      await _start();
+    } finally {
+      _starting = false;
+    }
+  }
+
+  Future<void> _start() async {
     final String? previous = state.filePath;
     final String path;
     try {
@@ -54,7 +69,12 @@ class RecordingController extends AutoDisposeNotifier<RecordingState> {
       await _recorder.start(path);
     } on RecorderException catch (e) {
       // 시작 실패: 이전 녹음(있다면)은 그대로 둔다.
-      state = state.copyWith(notice: e.notice);
+      if (!_disposed) state = state.copyWith(notice: e.notice);
+      return;
+    }
+    if (_disposed) {
+      // 시작을 기다리는 사이 화면이 닫혔다. 방금 시작한 녹음을 정상 종료해 파일을 남긴다.
+      unawaited(_recorder.stop().catchError((Object _) => null));
       return;
     }
     // 새 녹음이 실제로 시작된 뒤에야 이전 파일을 교체한다.
@@ -72,20 +92,21 @@ class RecordingController extends AutoDisposeNotifier<RecordingState> {
   }
 
   Future<void> pause({RecordingNotice notice = RecordingNotice.none}) async {
-    if (state.phase != RecordingPhase.recording) return;
+    if (_finalizing || state.phase != RecordingPhase.recording) return;
     _accumulated = _elapsedNow;
     _segmentStart = null;
     _tickSub?.cancel();
     state = state.copyWith(phase: RecordingPhase.paused, elapsed: _accumulated, notice: notice);
     try {
       await _recorder.pause();
+      if (_disposed) return;
     } on RecorderException catch (e) {
       await _finalize(reachedMax: false, notice: e.notice);
     }
   }
 
   Future<void> resume() async {
-    if (state.phase != RecordingPhase.paused) return;
+    if (_finalizing || state.phase != RecordingPhase.paused) return;
     try {
       await _recorder.resume();
     } on RecorderException catch (e) {
@@ -93,6 +114,7 @@ class RecordingController extends AutoDisposeNotifier<RecordingState> {
       await _finalize(reachedMax: false, notice: e.notice);
       return;
     }
+    if (_disposed) return;
     _segmentStart = _clock.now();
     state = state.copyWith(phase: RecordingPhase.recording, notice: RecordingNotice.none);
     _tickSub?.cancel();
@@ -101,7 +123,7 @@ class RecordingController extends AutoDisposeNotifier<RecordingState> {
 
   /// 사용자가 직접 [완료]를 누른 경우.
   Future<void> finish() async {
-    if (state.phase != RecordingPhase.recording && state.phase != RecordingPhase.paused) return;
+    if (_finalizing || (state.phase != RecordingPhase.recording && state.phase != RecordingPhase.paused)) return;
     _accumulated = _elapsedNow;
     _segmentStart = null;
     await _finalize(reachedMax: false);
@@ -150,8 +172,10 @@ class RecordingController extends AutoDisposeNotifier<RecordingState> {
       path = await _recorder.stop() ?? path;
     } on RecorderException catch (e) {
       // 저장 공간 부족 등으로 마무리가 실패해도 경로는 유지해 파일을 보존한다.
-      finalNotice = e.notice;
+      // 앞서 구체적인 사유가 있으면 모호한 unknown으로 덮지 않는다.
+      if (finalNotice == RecordingNotice.none || e.notice != RecordingNotice.unknown) finalNotice = e.notice;
     }
+    if (_disposed) return;
     state = RecordingState(
       phase: RecordingPhase.completed,
       elapsed: _accumulated,

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:ieum_mobile/core/theme/accessibility_config.dart';
+import 'package:ieum_mobile/core/theme/app_theme.dart';
 import 'package:ieum_mobile/features/voice/application/voice_providers.dart';
 import 'package:ieum_mobile/features/voice/domain/recording_models.dart';
 import 'package:ieum_mobile/features/voice/domain/voice_ports.dart';
@@ -14,15 +16,25 @@ class _Harness {
   final FakeClock clock = FakeClock();
   final FakePreviewPlayer player = FakePreviewPlayer();
   final FakePhoneLauncher launcher = FakePhoneLauncher();
+  final FakeMicGateway gateway = FakeMicGateway();
 
-  Widget app({String callName = '엄마', String? callPhone}) => ProviderScope(
+  Widget app({
+    String callName = '엄마',
+    String? callPhone,
+    AccessibilityConfig config = const AccessibilityConfig(),
+  }) =>
+      ProviderScope(
         overrides: [
           audioRecorderProvider.overrideWithValue(recorder),
           recordingClockProvider.overrideWithValue(clock),
           previewPlayerProvider.overrideWithValue(player),
           phoneLauncherProvider.overrideWithValue(launcher),
+          micPermissionGatewayProvider.overrideWithValue(gateway),
         ],
-        child: MaterialApp(home: VoiceRecorderScreen(callName: callName, callPhone: callPhone)),
+        child: MaterialApp(
+          theme: AppTheme.buildTheme(config),
+          home: VoiceRecorderScreen(callName: callName, callPhone: callPhone),
+        ),
       );
 }
 
@@ -196,23 +208,90 @@ void main() {
     expect(register.onPressed, isNull);
   });
 
-  group('접근성 불변식', () {
-    testWidgets('경고 색 타이머와 본문의 배경 대비가 4.5:1 이상이다', (WidgetTester tester) async {
-      await tester.pumpWidget(_Harness().app());
-      final ThemeData theme = Theme.of(tester.element(find.byType(VoiceRecorderScreen)));
-      final Color bg = theme.scaffoldBackgroundColor;
-      double lum(Color c) => c.computeLuminance();
-      double contrast(Color a, Color b) {
-        final double hi = lum(a) > lum(b) ? lum(a) : lum(b);
-        final double lo = lum(a) > lum(b) ? lum(b) : lum(a);
-        return (hi + 0.05) / (lo + 0.05);
-      }
+  testWidgets('영구 거부 안내의 설정 열기가 게이트웨이를 호출한다', (WidgetTester tester) async {
+    final _Harness h = _Harness()
+      ..recorder.startError = const RecorderException(RecordingNotice.permissionPermanentlyDenied);
+    await tester.pumpWidget(h.app());
+    await tester.tap(find.text('녹음 시작'));
+    await tester.pump();
 
-      expect(contrast(theme.colorScheme.error, bg), greaterThanOrEqualTo(4.5));
-      expect(contrast(theme.colorScheme.onSurface, bg), greaterThanOrEqualTo(4.5));
-    });
+    await tester.tap(find.text('설정 열기'));
+    await tester.pump();
+    expect(h.gateway.settingsOpened, 1);
+  });
+
+  testWidgets('통화 인터럽트가 오면 일시정지하고 화면에 안내한다', (WidgetTester tester) async {
+    final _Harness h = _Harness();
+    await tester.pumpWidget(h.app());
+    await tester.tap(find.text('녹음 시작'));
+    await tester.pump();
+    h.clock.advance(const Duration(seconds: 20));
+
+    h.recorder.interruptionController.add(InterruptionKind.begin);
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.textContaining('전화가 와서 잠시 멈췄어요'), findsOneWidget);
+    expect(find.text('이어서 녹음'), findsOneWidget);
+    expect(find.text('00:20'), findsOneWidget);
+    expect(h.recorder.discarded, isEmpty);
+  });
+
+  testWidgets('앱이 백그라운드로 가면 일시정지하고 안내한다', (WidgetTester tester) async {
+    final _Harness h = _Harness();
+    await tester.pumpWidget(h.app());
+    await tester.tap(find.text('녹음 시작'));
+    await tester.pump();
+    h.clock.advance(const Duration(seconds: 7));
+
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.textContaining('앱을 나가서 잠시 멈췄어요'), findsOneWidget);
+    expect(find.text('이어서 녹음'), findsOneWidget);
+    expect(find.text('00:07'), findsOneWidget);
+  });
+
+  testWidgets('음량 이벤트가 들어와도 파형이 예외 없이 갱신된다', (WidgetTester tester) async {
+    final _Harness h = _Harness();
+    await tester.pumpWidget(h.app());
+    await tester.tap(find.text('녹음 시작'));
+    await tester.pump();
+
+    for (int i = 0; i < 40; i++) {
+      h.recorder.levelController.add(i / 40);
+      await tester.pump();
+    }
+    expect(tester.takeException(), isNull);
+  });
+
+  group('접근성 불변식', () {
+    for (final AccessibilityConfig config in const <AccessibilityConfig>[
+      AccessibilityConfig(),
+      AccessibilityConfig(highContrastEnabled: true),
+      AccessibilityConfig(fontScaleMode: FontScaleMode.xlarge),
+    ]) {
+      testWidgets('앱 테마(${config.fontScaleMode.name}, 고대비 ${config.highContrastEnabled})의 경고 색·본문 대비가 4.5:1 이상',
+          (WidgetTester tester) async {
+        await tester.pumpWidget(_Harness().app(config: config));
+        final ThemeData theme = Theme.of(tester.element(find.byType(VoiceRecorderScreen)));
+        final Color bg = theme.scaffoldBackgroundColor;
+        double contrast(Color a, Color b) {
+          final double l1 = a.computeLuminance();
+          final double l2 = b.computeLuminance();
+          final double hi = l1 > l2 ? l1 : l2;
+          final double lo = l1 > l2 ? l2 : l1;
+          return (hi + 0.05) / (lo + 0.05);
+        }
+
+        expect(contrast(theme.colorScheme.error, bg), greaterThanOrEqualTo(4.5));
+        expect(contrast(theme.colorScheme.onSurface, bg), greaterThanOrEqualTo(4.5));
+      });
+    }
 
     testWidgets('녹음 전·녹음 중·일시정지·완료 화면 모두 본문 18sp 이상, 버튼 56dp 이상, 한글 라벨', (WidgetTester tester) async {
+      final SemanticsHandle semantics = tester.ensureSemantics();
       final _Harness h = _Harness();
       await tester.pumpWidget(h.app());
 
@@ -247,6 +326,13 @@ void main() {
       await tester.pump();
       expect(find.text('다시 녹음'), findsOneWidget);
       await check(); // completed
+      // 탐색 바: 터치 높이 48dp 이상, 스크린리더용 한글 라벨.
+      expect(tester.getSize(find.byType(Slider)).height, greaterThanOrEqualTo(48));
+      expect(
+        find.byWidgetPredicate((Widget w) => w is Semantics && w.properties.label == '재생 위치'),
+        findsOneWidget,
+      );
+      semantics.dispose();
     });
 
     testWidgets('전화 유도 모달: 본문 18sp 이상, 버튼 56dp 이상', (WidgetTester tester) async {
