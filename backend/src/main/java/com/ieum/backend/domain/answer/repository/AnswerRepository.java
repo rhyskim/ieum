@@ -54,4 +54,15 @@ public interface AnswerRepository extends JpaRepository<Answer, UUID> {
     @Query("select a from Answer a where a.dailyQuestion.id in :dqIds and a.user.id = :userId "
         + "order by a.createdAt asc, a.id asc")
     List<Answer> findMineWithUserByDqIds(@Param("dqIds") Collection<UUID> dqIds, @Param("userId") UUID userId);
+
+    /** 아직 답하지 않은 유효 멤버의 user id(가입순). 15시 리마인드 대상이다. 정의는 위 count와 같다. */
+    @Query("select u.id from GroupMember m join m.user u where m.group.id = :groupId and "
+        + GroupMemberRepository.ACTIVE + " and " + GroupMemberRepository.VALID_USER
+        + " and not exists (select 1 from Answer a where a.dailyQuestion.id = :dqId and a.user.id = u.id)"
+        + " order by m.joinedAt asc, m.id asc")
+    List<UUID> findUnansweredValidUserIds(@Param("dqId") UUID dqId, @Param("groupId") UUID groupId);
+
+    /** 답한 순서대로(먼저 답한 사람이 앞). 본문은 읽지 않는다. */
+    @Query("select a.user.id from Answer a where a.dailyQuestion.id = :dqId order by a.createdAt asc, a.id asc")
+    List<UUID> findAnsweredUserIdsInOrder(@Param("dqId") UUID dqId);
 }

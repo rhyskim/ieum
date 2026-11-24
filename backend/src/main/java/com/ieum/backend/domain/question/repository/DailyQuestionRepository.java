@@ -108,4 +108,26 @@ public interface DailyQuestionRepository extends JpaRepository<DailyQuestion, UU
         @Param("id") UUID id,
         Pageable pageable
     );
+
+    @Query("select d.group.id from DailyQuestion d where d.id = :id")
+    Optional<UUID> findGroupId(@Param("id") UUID id);
+
+    /** 17시 공개 작업 후보: 마감이 지났고 답변이 1건 이상인 LOCKED 질문(ACTIVE 그룹). id 오름차순 = 락 순서(ADR-0007 결정 9). */
+    @Query("select d.id from DailyQuestion d where d.revealStatus = com.ieum.backend.domain.common.enums.RevealStatus.LOCKED "
+        + "and d.autoRevealAt <= :now and d.group.status = com.ieum.backend.domain.common.enums.GroupStatus.ACTIVE "
+        + "and exists (select 1 from Answer a where a.dailyQuestion.id = d.id) order by d.id")
+    List<UUID> findTimeoutRevealCandidateIds(@Param("now") Instant now);
+
+    /** 15시 리마인드 후보: 마감 전 2시간 안에 들어온 LOCKED 질문 중 아직 리마인드를 보내지 않은 것(ACTIVE 그룹). */
+    @Query("select d.id from DailyQuestion d where d.revealStatus = com.ieum.backend.domain.common.enums.RevealStatus.LOCKED "
+        + "and d.reminderSent = false and d.autoRevealAt > :now and d.autoRevealAt <= :windowEnd "
+        + "and d.group.status = com.ieum.backend.domain.common.enums.GroupStatus.ACTIVE order by d.id")
+    List<UUID> findReminderCandidateIds(@Param("now") Instant now, @Param("windowEnd") Instant windowEnd);
+
+    /** 리마인드 발송권 획득. 1이면 내가 가져간 것이고 그때만 푸시한다. 시각 조건이 UPDATE 안에 있어 마감 후에는 0이다. */
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
+    @Query("update DailyQuestion d set d.reminderSent = true where d.id = :id and d.reminderSent = false "
+        + "and d.revealStatus = com.ieum.backend.domain.common.enums.RevealStatus.LOCKED "
+        + "and d.autoRevealAt > :now and d.autoRevealAt <= :windowEnd")
+    int markReminderSent(@Param("id") UUID id, @Param("now") Instant now, @Param("windowEnd") Instant windowEnd);
 }

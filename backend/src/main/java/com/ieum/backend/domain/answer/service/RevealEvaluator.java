@@ -30,6 +30,7 @@ public class RevealEvaluator {
     private final AnswerRepository answerRepository;
     private final GroupMemberRepository memberRepository;
     private final ApplicationEventPublisher publisher;
+    private final TimeoutRevealNotifier timeoutNotifier;
 
     /** 저장·멤버 변동 후 재평가. 전원 답변 → REVEALED_ALL, 아니면 시간 초과 → REVEALED_TIMEOUT. 최종 상태를 돌려준다. */
     @Transactional(propagation = Propagation.MANDATORY)
@@ -45,16 +46,28 @@ public class RevealEvaluator {
                 notifyAllAnswered(groupId);
             }
         } else {
-            dailyQuestionRepository.revealTimeoutIfDue(dqId, now);
+            revealTimeoutAndNotify(dqId, groupId, now);
         }
         return dailyQuestionRepository.findRevealStatus(dqId).orElseThrow();
     }
 
-    /** 조회 시점의 지연 전환(혼합형): 시간 초과 조건만 본다. 조건부 UPDATE 한 번이라 잠금 없이 안전하다. */
+    /**
+     * 시간 초과 전환의 유일한 진입점: 조회 시점의 지연 전환(혼합형)과 17시 작업이 모두 이 메서드를 쓴다.
+     * 조건부 UPDATE 한 번이라 추가 잠금이 없고, 1행을 바꾼 호출만 공개 푸시를 발행하므로 어느 쪽이 먼저 전환해도
+     * 푸시는 정확히 한 번 나간다. 전환이 없는 평소 조회에서는 추가 쿼리가 없다.
+     */
     @Transactional(propagation = Propagation.MANDATORY)
     public RevealStatus revealIfTimedOut(UUID dqId, Instant now) {
-        dailyQuestionRepository.revealTimeoutIfDue(dqId, now);
+        if (dailyQuestionRepository.revealTimeoutIfDue(dqId, now) == 1) {
+            timeoutNotifier.notifyRevealed(dqId, dailyQuestionRepository.findGroupId(dqId).orElseThrow());
+        }
         return dailyQuestionRepository.findRevealStatus(dqId).orElseThrow();
+    }
+
+    private void revealTimeoutAndNotify(UUID dqId, UUID groupId, Instant now) {
+        if (dailyQuestionRepository.revealTimeoutIfDue(dqId, now) == 1) {
+            timeoutNotifier.notifyRevealed(dqId, groupId);
+        }
     }
 
     /** 개인정보 없는 고정 문구는 리스너가 만든다. 커밋 후 비동기로 발송된다(ADR-0004). */

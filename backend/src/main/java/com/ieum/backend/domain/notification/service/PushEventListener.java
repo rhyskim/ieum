@@ -81,16 +81,21 @@ public class PushEventListener {
         }
     }
 
-    /** 잠금 화면에 보이므로 이름·호칭·메시지를 넣지 않고 고정 문구와 식별자만 쓴다. */
+    /** 잠금 화면에 보이므로 답변 내용은 넣지 않는다. 고정 문구가 기본이고, 호칭이 든 문구는 이벤트 body로만 온다. */
     private PushMessage messageOf(GroupPushEvent event) {
         UUID groupId = event.groupId();
         Map<String, String> data = Map.of("type", event.type().name(), "groupId", groupId.toString());
+        if (event.body() != null) {
+            return new PushMessage("이음", event.body(), data);
+        }
         return switch (event.type()) {
             case JOIN_REQUESTED -> new PushMessage("이음", "가족 방에 새 입장 요청이 있어요", data);
             case JOIN_APPROVED -> new PushMessage("이음", "가족 방 입장 요청이 승인되었어요", data);
             case JOIN_REJECTED -> new PushMessage("이음", "가족 방 입장 요청 결과가 도착했어요", data);
             case QUESTION_ASSIGNED -> new PushMessage("이음", "새 질문이 도착했어요", data);
             case ALL_ANSWERED -> new PushMessage("이음", "모두가 답변을 마쳤어요", data);
+            case REMINDER -> new PushMessage("이음", "오늘의 질문에 답을 남겨보세요. 17시에 가족의 답변이 공개돼요", data);
+            case REVEALED_TIMEOUT -> new PushMessage("이음", "가족의 답변이 공개됐어요", data);
         };
     }
 }
