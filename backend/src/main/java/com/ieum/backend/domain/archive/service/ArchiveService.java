@@ -13,6 +13,7 @@ import com.ieum.backend.domain.question.repository.DailyQuestionRepository;
 import com.ieum.backend.domain.reaction.dto.ReactionDtos.EmojiReaction;
 import com.ieum.backend.domain.reaction.service.DisplayNames;
 import com.ieum.backend.domain.reaction.service.ReactionService;
+import com.ieum.backend.global.common.UuidOrder;
 import com.ieum.backend.global.exception.BusinessException;
 import com.ieum.backend.global.exception.ErrorCode;
 import java.nio.charset.StandardCharsets;
@@ -78,8 +79,10 @@ public class ArchiveService {
         // 1) 공개 상태: LOCKED인 질문만 지연 전환(조건부 UPDATE)을 시도한다. 벌크 UPDATE가 영속성 컨텍스트를 비우므로
         //    질문·본문 정보는 먼저 값으로 꺼내 둔다.
         //    전환 UPDATE는 행 락을 커밋까지 쥐므로 daily_questions는 id 오름차순으로 잠근다(ADR-0007 결정 9).
+        //    재평가·작업은 DB의 ORDER BY id 순서로 잠그므로 여기도 UUID 자연 순서(부호 있는 비교)가 아니라 DB 순서를 쓴다.
         Map<UUID, RevealStatus> switched = new HashMap<>();
-        page.stream().filter(d -> d.getRevealStatus() == RevealStatus.LOCKED).map(DailyQuestion::getId).sorted()
+        page.stream().filter(d -> d.getRevealStatus() == RevealStatus.LOCKED).map(DailyQuestion::getId)
+            .sorted(UuidOrder.DB_ORDER)
             .forEach(id -> switched.put(id, revealEvaluator.revealIfTimedOut(id, clock.instant())));
         Map<UUID, RevealStatus> statuses = new LinkedHashMap<>();
         for (DailyQuestion d : page) {

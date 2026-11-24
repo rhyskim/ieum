@@ -412,6 +412,33 @@ class ReminderRevealPushIntegrationTest {
         pushTo(f.token(1));
     }
 
+    // ---------- 락 순서(UUID 정렬) ----------
+
+    @Test
+    @DisplayName("id 최상위 비트가 다른 질문들도 자바 DB_ORDER 정렬이 PostgreSQL ORDER BY id와 같다(락 순서 기준)")
+    void javaLockOrderMatchesDatabaseOrder() {
+        Family f = newFamily(2);
+        jdbc.update("delete from daily_questions where group_id = ?", f.groupId());
+        UUID low = UUID.fromString("7fffffff-ffff-ffff-ffff-ffffffffffff");
+        UUID high = UUID.fromString("80000000-0000-0000-0000-000000000000");
+        int day = 0;
+        for (UUID id : List.of(high, low)) {
+            jdbc.update("insert into daily_questions (id, group_id, question_id, cycle_date, reveal_status, assigned_at, auto_reveal_at) "
+                    + "values (?, ?, (select id from questions where sequence_order = 1), ?, 'LOCKED', ?, ?)",
+                id, f.groupId(), DAY1.minusDays(++day),
+                java.sql.Timestamp.from(TimeZoneConstants.assignedAt(DAY1)),
+                java.sql.Timestamp.from(TimeZoneConstants.autoRevealAt(DAY1)));
+        }
+
+        List<UUID> dbOrder = jdbc.queryForList(
+            "select id from daily_questions where group_id = ? order by id", UUID.class, f.groupId());
+        List<UUID> javaOrder = List.of(high, low).stream()
+            .sorted(com.ieum.backend.global.common.UuidOrder.DB_ORDER).toList();
+
+        assertThat(dbOrder).containsExactly(low, high);
+        assertThat(javaOrder).isEqualTo(dbOrder);
+    }
+
     // ---------- 문구 ----------
 
     @Test
