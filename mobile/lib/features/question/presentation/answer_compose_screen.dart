@@ -5,6 +5,7 @@ import 'package:ieum_mobile/core/network/api_exception.dart';
 import 'package:ieum_mobile/features/group/presentation/group_widgets.dart';
 import 'package:ieum_mobile/features/question/data/question_repository_impl.dart';
 import 'package:ieum_mobile/features/question/domain/question_models.dart';
+import 'package:ieum_mobile/features/question/presentation/speak_to_write_button.dart';
 
 /// 텍스트 답변 작성·수정. 공백 제외 30자 미만이면 저장 버튼을 막고 남은 글자 수를 알려 준다(서버도 같은 규칙으로 거절).
 class AnswerComposeScreen extends ConsumerStatefulWidget {
@@ -85,6 +86,11 @@ class _AnswerComposeScreenState extends ConsumerState<AnswerComposeScreen> {
                 counterStyle: TextStyle(fontSize: 18),
               ),
               onChanged: (_) => setState(() => _error = null),
+            ),
+            const SizedBox(height: 8),
+            SpeakToWriteButton(
+              controller: _controller,
+              onTextChanged: () => setState(() => _error = null),
             ),
             const SizedBox(height: 8),
             Semantics(

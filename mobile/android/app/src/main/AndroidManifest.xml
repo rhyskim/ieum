@@ -2,6 +2,7 @@
     xmlns:tools="http://schemas.android.com/tools">
     <uses-permission android:name="android.permission.INTERNET"/>
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+    <uses-permission android:name="android.permission.RECORD_AUDIO"/>
 
     <application
         android:label="이음"
@@ -55,6 +56,13 @@
         <!-- 카카오톡·네이버 앱 로그인 -->
         <package android:name="com.kakao.talk"/>
         <package android:name="com.nhn.android.search"/>
+        <!-- 음성 인식(speech_to_text)과 TTS(flutter_tts) 엔진 조회 -->
+        <intent>
+            <action android:name="android.speech.RecognitionService"/>
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.TTS_SERVICE"/>
+        </intent>
         <intent>
             <action android:name="android.intent.action.PROCESS_TEXT"/>
             <data android:mimeType="text/plain"/>

@@ -8,6 +8,7 @@ import 'package:ieum_mobile/features/archive/presentation/reaction_bar.dart';
 import 'package:ieum_mobile/features/group/presentation/group_widgets.dart';
 import 'package:ieum_mobile/features/question/data/question_repository_impl.dart';
 import 'package:ieum_mobile/features/question/domain/question_models.dart';
+import 'package:ieum_mobile/features/question/presentation/listen_question_button.dart';
 
 /// 오늘의 질문과 가족의 답변 현황. 가려진 답변은 서버가 본문을 주지 않으므로 이 화면의 블러는
 /// 자리표시를 꾸민 연출일 뿐이다(블러를 풀어도 볼 수 있는 내용이 없다).
@@ -76,6 +77,8 @@ class _BoardBody extends StatelessWidget {
       padding: const EdgeInsets.all(24),
       children: <Widget>[
         Text(detail.questionText, style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
+        const SizedBox(height: 12),
+        ListenQuestionButton(text: detail.questionText),
         const SizedBox(height: 16),
         // 상세와 목록은 순차 호출이라 17시 경계에서 상태가 달라질 수 있다. 나중에 받은 목록의 상태가 최신이며,
         // 아래에 보이는 답변 목록과 같은 시점의 값이라 안내와 목록이 어긋나지 않는다.

@@ -91,6 +91,19 @@ Future<void> _openCompose(WidgetTester tester, _FakeQuestionRepository repo) asy
   await tester.pumpAndSettle();
 }
 
+/// 큰 화면 요소가 늘어도 저장 버튼에 닿을 수 있어야 하므로, 화면을 스크롤해 저장 버튼을 보이게 한 뒤 다룬다.
+Future<void> _scrollToSave(WidgetTester tester) => tester.scrollUntilVisible(
+      find.widgetWithText(ElevatedButton, '저장하기'),
+      100,
+      scrollable: find.descendant(of: find.byType(ListView), matching: find.byType(Scrollable)).first,
+    );
+
+/// 입력창이 화면 밖에 있으면 스크롤해서 보이게 한다.
+Future<void> _scrollToField(WidgetTester tester) async {
+  await tester.ensureVisible(find.byType(TextField));
+  await tester.pump();
+}
+
 void main() {
   testWidgets('LOCKED: 아빠가 답했다는 사실만 보이고 본문은 없으며 가려진 자리표시가 블러로 보인다', (tester) async {
     final _FakeQuestionRepository repo = _FakeQuestionRepository();
@@ -132,7 +145,10 @@ void main() {
     await tester.pumpWidget(_app(repo, const TodayQuestionScreen(groupId: 'g1')));
     await tester.pumpAndSettle();
 
+    // 듣기 버튼이 늘어 답변 목록이 첫 화면 아래로 내려갔으므로 스크롤해서 확인한다.
+    await tester.scrollUntilVisible(find.text('아빠가 쓴 답변'), 100);
     expect(find.text('아빠가 쓴 답변'), findsOneWidget);
+    await tester.scrollUntilVisible(find.text('내가 쓴 답변'), 100);
     expect(find.text('내가 쓴 답변'), findsOneWidget);
     expect(_maskedPlaceholder, findsNothing);
     expect(find.widgetWithText(ElevatedButton, '내 답변 고치기'), findsOneWidget);
@@ -182,15 +198,20 @@ void main() {
     final _FakeQuestionRepository repo = _FakeQuestionRepository();
     await _openCompose(tester, repo);
 
+    await _scrollToSave(tester);
     expect(tester.widget<ElevatedButton>(find.widgetWithText(ElevatedButton, '저장하기')).onPressed, isNull);
 
+    await _scrollToField(tester);
     await tester.enterText(find.byType(TextField), '가 ' * 29); // 공백 빼면 29자
     await tester.pump();
+    await _scrollToSave(tester);
     expect(tester.widget<ElevatedButton>(find.widgetWithText(ElevatedButton, '저장하기')).onPressed, isNull);
     expect(find.textContaining('지금 29자예요'), findsOneWidget);
 
+    await _scrollToField(tester);
     await tester.enterText(find.byType(TextField), '가 ' * 30);
     await tester.pump();
+    await _scrollToSave(tester);
     expect(tester.widget<ElevatedButton>(find.widgetWithText(ElevatedButton, '저장하기')).onPressed, isNotNull);
     expect(tester.getSize(find.widgetWithText(ElevatedButton, '저장하기')).height, greaterThanOrEqualTo(56));
   });
@@ -218,12 +239,14 @@ void main() {
     await tester.enterText(find.byType(TextField), text);
     await tester.pump();
     repo.saveError = const ApiException(code: 'ANSWER_TOO_SHORT', message: '답변은 공백을 뺀 30자 이상 써 주세요.');
+    await _scrollToSave(tester);
     await tester.tap(find.widgetWithText(ElevatedButton, '저장하기'));
     await tester.pumpAndSettle();
     expect(find.text('답변은 공백을 뺀 30자 이상 써 주세요.'), findsOneWidget);
     expect(repo.saved, isEmpty);
 
     repo.saveError = null;
+    await _scrollToSave(tester);
     await tester.tap(find.widgetWithText(ElevatedButton, '저장하기'));
     await tester.pumpAndSettle();
     expect(repo.saved, <String>[text]);
