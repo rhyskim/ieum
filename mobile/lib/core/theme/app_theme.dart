@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:ieum_mobile/core/theme/accessibility_config.dart';
 import 'package:ieum_mobile/core/theme/app_colors.dart';
+import 'package:ieum_mobile/core/theme/paper_theme.dart';
 
 abstract final class AppTheme {
   static const Size minButtonSize = Size(88, 56);
@@ -12,22 +13,22 @@ abstract final class AppTheme {
 
     final Color background = isHighContrast
         ? AppColors.highContrastBackground
-        : AppColors.warmBackground;
+        : Colors.transparent; // 종이 배경(PaperBackground)이 앱 루트에서 비친다
     final Color surface = isHighContrast
         ? AppColors.highContrastSurface
-        : AppColors.warmSurface;
+        : PaperTheme.surface;
     final Color textPrimary = isHighContrast
         ? AppColors.highContrastTextPrimary
-        : AppColors.warmTextPrimary;
+        : PaperTheme.textPrimary;
     final Color textSecondary = isHighContrast
         ? AppColors.highContrastTextSecondary
-        : AppColors.warmTextSecondary;
+        : PaperTheme.textSecondary;
     final Color primary = isHighContrast
         ? AppColors.highContrastPrimary
-        : AppColors.warmPrimary;
+        : PaperTheme.accent;
     final Color onPrimary = isHighContrast
         ? AppColors.highContrastOnPrimary
-        : AppColors.warmOnPrimary;
+        : PaperTheme.onAccent;
     final Color secondary = isHighContrast
         ? AppColors.highContrastSecondary
         : AppColors.warmSecondary;
@@ -36,7 +37,7 @@ abstract final class AppTheme {
         : AppColors.warmOnSecondary;
     final Color error = isHighContrast
         ? AppColors.highContrastError
-        : AppColors.warmError;
+        : PaperTheme.error;
     final Color onError = isHighContrast
         ? AppColors.highContrastOnError
         : AppColors.warmOnError;
@@ -55,12 +56,14 @@ abstract final class AppTheme {
 
     final TextTheme textTheme = TextTheme(
       headlineMedium: TextStyle(
+        fontFamily: PaperTheme.titleFontFamily,
         fontSize: scaleMode.titleSize + 2.0,
         height: lineHeight,
         fontWeight: FontWeight.w700,
         color: textPrimary,
       ),
       titleLarge: TextStyle(
+        fontFamily: PaperTheme.titleFontFamily,
         fontSize: scaleMode.titleSize,
         height: lineHeight,
         fontWeight: FontWeight.w700,
@@ -79,7 +82,7 @@ abstract final class AppTheme {
         color: textPrimary,
       ),
       bodyMedium: TextStyle(
-        fontSize: scaleMode.bodySize - 1.0,
+        fontSize: scaleMode.bodySize,
         height: lineHeight,
         fontWeight: FontWeight.w400,
         color: textSecondary,
@@ -102,11 +105,18 @@ abstract final class AppTheme {
 
     return ThemeData(
       useMaterial3: true,
+      fontFamily: PaperTheme.bodyFontFamily,
       colorScheme: colorScheme,
       scaffoldBackgroundColor: background,
       textTheme: textTheme,
+      navigationBarTheme: NavigationBarThemeData(
+        backgroundColor: Colors.transparent,
+        indicatorColor: isHighContrast ? null : PaperTheme.navIndicator,
+        labelTextStyle: WidgetStatePropertyAll<TextStyle?>(textTheme.bodyMedium),
+      ),
       appBarTheme: AppBarTheme(
-        backgroundColor: surface,
+        backgroundColor: isHighContrast ? surface : Colors.transparent,
+        scrolledUnderElevation: 0,
         foregroundColor: textPrimary,
         elevation: 0,
         centerTitle: false,
@@ -118,7 +128,7 @@ abstract final class AppTheme {
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(16),
           side: BorderSide(
-            color: isHighContrast ? textPrimary : const Color(0xFFE5DFD5),
+            color: isHighContrast ? textPrimary : PaperTheme.border,
             width: isHighContrast ? 2.0 : 1.0,
           ),
         ),

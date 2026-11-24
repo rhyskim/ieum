@@ -3,12 +3,18 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:ieum_mobile/app.dart';
 import 'package:ieum_mobile/core/push/push_service.dart';
+import 'package:ieum_mobile/core/theme/text_scale.dart';
+import 'package:ieum_mobile/features/settings/presentation/licenses_screen.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  registerFontLicenses();
+  final prefs = await SharedPreferences.getInstance();
   runApp(
     ProviderScope(
       overrides: [
+        sharedPreferencesProvider.overrideWithValue(prefs),
         pushServiceProvider.overrideWithValue(await _initPushService()),
       ],
       child: const IeumApp(),

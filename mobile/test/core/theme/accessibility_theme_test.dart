@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:ieum_mobile/core/theme/accessibility_config.dart';
 import 'package:ieum_mobile/core/theme/app_theme.dart';
+import 'package:ieum_mobile/core/theme/paper_theme.dart';
 
 double _contrastRatio(Color a, Color b) {
   final double lumA = a.computeLuminance();
@@ -48,7 +49,10 @@ void main() {
       );
       final cs = theme.colorScheme;
 
-      expect(_contrastRatio(cs.onSurface, theme.scaffoldBackgroundColor), greaterThanOrEqualTo(4.5));
+      // 일반 모드의 Scaffold는 투명이고 종이 배경이 비친다. 배경 그라데이션 양 끝 색으로 검증한다.
+      for (final Color bg in PaperTheme.backgroundSamples) {
+        expect(_contrastRatio(cs.onSurface, bg), greaterThanOrEqualTo(4.5));
+      }
       expect(_contrastRatio(cs.onSurface, cs.surface), greaterThanOrEqualTo(4.5));
       expect(_contrastRatio(cs.onPrimary, cs.primary), greaterThanOrEqualTo(4.5));
       expect(_contrastRatio(cs.onSecondary, cs.secondary), greaterThanOrEqualTo(4.5));
