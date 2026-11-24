@@ -62,10 +62,11 @@ public class TimeoutRevealNotifier {
         }
         String names = answerers.stream().limit(MAX_NAMES).map(id -> sanitize(nameOf.apply(id)))
             .collect(java.util.stream.Collectors.joining(", "));
-        if (answerers.size() > MAX_NAMES) {
-            names += " 외 " + (answerers.size() - MAX_NAMES) + "명";
-        }
-        return names + "님은 오늘의 질문에 답을 남겼어요. " + sanitize(selfName) + "님도 답을 남겨보시는 게 어떨까요?";
+        // 3명 이하: "A, B님은", 초과: "A, B, C님 외 N명은"
+        String subject = answerers.size() > MAX_NAMES
+            ? names + "님 외 " + (answerers.size() - MAX_NAMES) + "명은"
+            : names + "님은";
+        return subject + " 오늘의 질문에 답을 남겼어요. " + sanitize(selfName) + "님도 답을 남겨보시는 게 어떨까요?";
     }
 
     /** 줄바꿈·제어 문자를 공백으로 줄이고 길이를 제한한다. 호칭은 사용자 입력이다. */

@@ -37,6 +37,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -121,6 +122,12 @@ class ReminderRevealPushIntegrationTest {
         jdbc.update("update family_groups set status = 'ARCHIVED'");
         jdbc.update("delete from questions");
         jdbc.update("insert into questions (sequence_order, category, question_text) values (1, 'DAILY', '테스트 질문')");
+    }
+
+    /** 비동기 발송이 다음 테스트의 mock 검증에 섞이지 않도록 남은 발송을 기다린다. */
+    @AfterEach
+    void drainAsyncPushes() {
+        sleep(700);
     }
 
     // ---------- helpers ----------
@@ -236,7 +243,8 @@ class ReminderRevealPushIntegrationTest {
         assertThat(results.stream().mapToInt(Integer::intValue).sum()).isEqualTo(1);
         PushMessage msg = pushTo(f.token(0));
         pushTo(f.token(2));
-        assertThat(msg.data()).containsOnlyKeys("type", "groupId").containsEntry("type", "REMINDER");
+        assertThat(msg.data()).containsOnlyKeys("type", "groupId")
+            .containsEntry("type", "REMINDER").containsEntry("groupId", f.groupId().toString());
         assertThat(reminderService.remindDue()).isZero();
         settle();
         verify(sender, never()).send(eq(f.token(1)), any());
@@ -286,6 +294,8 @@ class ReminderRevealPushIntegrationTest {
         pushTo(late.token(1));
 
         Family afterDeadline = newFamily(2);
+        at(17, 0); // 마감 정각도 보내지 않는다(auto_reveal_at > now)
+        assertThat(reminderService.remindDue()).isZero();
         at(17, 1);
         assertThat(reminderService.remindDue()).isZero();
         settle();
@@ -305,8 +315,14 @@ class ReminderRevealPushIntegrationTest {
         at(15, 30);
 
         assertThat(reminderService.remindDue()).isZero();
+        assertThat(dbStatus(f)).isEqualTo("REVEALED_ALL");
+
+        at(17, 5); // 17시 이후 작업과 조회 지연 전환도 REVEALED_ALL을 건드리지 않고 공개 푸시를 보내지 않는다
+        timeoutRevealService.revealDue();
+        tx.executeWithoutResult(s -> revealEvaluator.revealIfTimedOut(f.dqId(), clock.instant()));
 
         settle();
+        assertThat(dbStatus(f)).isEqualTo("REVEALED_ALL");
         verify(sender, never()).send(anyString(), any());
     }
 
@@ -337,7 +353,8 @@ class ReminderRevealPushIntegrationTest {
 
         assertThat(dbStatus(f)).isEqualTo("REVEALED_TIMEOUT");
         for (int i = 0; i < 3; i++) {
-            assertThat(pushTo(f.token(i)).data()).containsEntry("type", "REVEALED_TIMEOUT");
+            assertThat(pushTo(f.token(i)).data()).containsOnlyKeys("type", "groupId")
+                .containsEntry("type", "REVEALED_TIMEOUT").containsEntry("groupId", f.groupId().toString());
         }
         timeoutRevealService.revealDue();
         settle();
@@ -432,9 +449,11 @@ class ReminderRevealPushIntegrationTest {
         timeoutRevealService.revealDue();
 
         assertThat(pushTo(solo.token(0)).body()).isEqualTo("가족의 답변이 공개됐어요");
+        // 다른 답변자가 여럿이면 가장 먼저 답한 사람(엄마)을 쓴다
+        assertThat(pushTo(many.token(3)).body()).isEqualTo("엄마님은 오늘의 질문에 어떤 답을 했을까요?");
         PushMessage unanswered = pushTo(many.token(4));
         assertThat(unanswered.body()).isEqualTo(
-            "엄마, 멤버1, 멤버2 외 1명님은 오늘의 질문에 답을 남겼어요. 멤버4님도 답을 남겨보시는 게 어떨까요?");
+            "엄마, 멤버1, 멤버2님 외 1명은 오늘의 질문에 답을 남겼어요. 멤버4님도 답을 남겨보시는 게 어떨까요?");
         assertThat(unanswered.data()).containsOnlyKeys("type", "groupId");
         assertThat(unanswered.body() + unanswered.title() + unanswered.data()).doesNotContain("비밀 답변");
     }

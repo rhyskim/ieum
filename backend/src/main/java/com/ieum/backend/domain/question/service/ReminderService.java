@@ -35,12 +35,13 @@ public class ReminderService {
 
     /** 이번 실행이 발송권을 얻은 질문 수를 돌려준다. */
     public int remindDue() {
-        Instant now = clock.instant();
-        Instant windowEnd = now.plus(WINDOW);
+        Instant start = clock.instant();
         int sent = 0;
-        for (UUID dqId : dailyQuestionRepository.findReminderCandidateIds(now, windowEnd)) {
+        for (UUID dqId : dailyQuestionRepository.findReminderCandidateIds(start, start.plus(WINDOW))) {
             try {
-                Boolean won = tx.execute(s -> remind(dqId, now, windowEnd));
+                // 질문마다 현재 시각을 다시 잡는다: 루프가 길어져 마감을 넘기면 발송권 UPDATE의 시각 조건이 막는다.
+                Instant now = clock.instant();
+                Boolean won = tx.execute(s -> remind(dqId, now, now.plus(WINDOW)));
                 if (Boolean.TRUE.equals(won)) {
                     sent++;
                 }
